@@ -1,4 +1,4 @@
 module.exports = require("./webpack.config")({
     minified: true,
-    filename: 'dist/hydra.min.js'
+    filename: 'dist/jwt.min.js'
 });
