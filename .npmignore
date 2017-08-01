@@ -1,0 +1,24 @@
+# Do not add dist/ here as dist/ is what is pushed to npm
+
+*.iml
+.idea
+/npm-debug.log
+/node_modules
+
+.babelrc
+tsconfig.json
+webpack.*
+
+# OS generated files #
+# ######################
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# Thumbnails
+._*
+
+# # Files that might appear on external disk
+.Spotlight-V100
+.Trashes
