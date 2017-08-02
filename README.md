@@ -24,6 +24,7 @@ By default we resolve each <env>.foo.redhat.com to the respective JWT login url.
 
 It may be the case that we'll need to update this project to accomodate your specific url.  I would communicate the following to IAM when opening the ticket.  Communicate the exact url you will be logging in with, and ask if it can be whitelisted.  If they say they will only for dev1/dev2, then we'll need to update this project to include your env specific dev url for dev1 or dev2.  We may be able to parameterize that in the future if needed.
 
+To depend on this project in package.json the line will looke like: `"jwt": "git+https://gitlab.cee.redhat.com/redhataccess/jwt.git#0.0.3",`  Please *make sure* that you are using the latest tag version.  You will have to manually check @ https://gitlab.cee.redhat.com/redhataccess/jwt/tags
 
 ### Authentication examples
 
@@ -84,7 +85,3 @@ Jwt.onInit(() => {
     }
 });
 ```
-
-### Contributing
-
-Please click [Contributing Guide](https://gitlab.cee.redhat.com/sshumake/ascension/blob/master/CONTRIBUTING.md)
