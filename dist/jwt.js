@@ -1757,14 +1757,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	                                var tokenResponse = JSON.parse(req_1.responseText);
 	                                setToken(tokenResponse['access_token'], tokenResponse['refresh_token'], tokenResponse['id_token'], timeLocal_1);
 	                                kc.onAuthRefreshSuccess && kc.onAuthRefreshSuccess();
-	                                for (var p = refreshQueue.pop(); p !== null; p = refreshQueue.pop()) {
-	                                    p.setSuccess(true);
+	                                for (var p = refreshQueue.pop(); p != null; p = refreshQueue.pop()) {
+	                                    if (p)
+	                                        p.setSuccess(true);
 	                                }
 	                            }
 	                            else {
 	                                kc.onAuthRefreshError && kc.onAuthRefreshError();
-	                                for (var p = refreshQueue.pop(); p !== null; p = refreshQueue.pop()) {
-	                                    p.setError(true);
+	                                for (var p = refreshQueue.pop(); p != null; p = refreshQueue.pop()) {
+	                                    if (p)
+	                                        p.setError(true);
 	                                }
 	                            }
 	                        }
