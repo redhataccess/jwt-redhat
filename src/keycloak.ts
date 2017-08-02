@@ -1,7 +1,12 @@
 import CallbackParser           from './callbackParser';
 import LocalStorage             from './localStorage';
 import CookieStorage            from './cookieStorage';
-import { IKeycloakOptions, IKeycloakInitOptions } from './models';
+
+import {
+    IKeycloakOptions,
+    IKeycloakInitOptions,
+    ITokenResponse
+} from './models';
 
 /*
  * Copyright 2016 Red Hat, Inc. and/or its affiliates
@@ -445,13 +450,13 @@ const Keycloak = function (config: IKeycloakOptions) {
                                 setToken(tokenResponse['access_token'], tokenResponse['refresh_token'], tokenResponse['id_token'], timeLocal);
 
                                 kc.onAuthRefreshSuccess && kc.onAuthRefreshSuccess();
-                                for (let p = refreshQueue.pop(); p !== null; p = refreshQueue.pop()) {
-                                    p.setSuccess(true);
+                                for (let p = refreshQueue.pop(); p != null; p = refreshQueue.pop()) {
+                                    if (p) p.setSuccess(true);
                                 }
                             } else {
                                 kc.onAuthRefreshError && kc.onAuthRefreshError();
-                                for (let p = refreshQueue.pop(); p !== null; p = refreshQueue.pop()) {
-                                    p.setError(true);
+                                for (let p = refreshQueue.pop(); p != null; p = refreshQueue.pop()) {
+                                    if (p) p.setError(true);
                                 }
                             }
                         }
@@ -640,7 +645,7 @@ const Keycloak = function (config: IKeycloakOptions) {
         return promise.promise;
     }
 
-    function setToken(token, refreshToken, idToken, timeLocal) {
+    function setToken(token: ITokenResponse, refreshToken, idToken, timeLocal) {
         if (kc.tokenTimeoutHandle) {
             clearTimeout(kc.tokenTimeoutHandle);
             kc.tokenTimeoutHandle = null;

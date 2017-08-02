@@ -8,7 +8,7 @@ export interface IKeycloakOptions {
 export interface IKeycloakInitOptions {
     responseMode?: 'query' | 'fragment';
     flow: 'standard' | 'implicit' | 'hybrid';
-    token: string; // Or IToken, unsure
+    token: ITokenResponse; // Or IToken, unsure
     refreshToken: string;
     adapter?: any; // appears to be string which is then set to an object
     checkLoginIframe?: any;
@@ -52,4 +52,15 @@ export interface IToken {
 export interface IState {
     initialized: boolean;
     keycloak: any;
+}
+
+export interface ITokenResponse {
+    access_token: string;
+    expires_in: number; // default 300
+    id_token: string;
+    'not-before-policy': number;
+    refresh_expires_in: number; // default 36000
+    refresh_token: string;
+    session_state: string;
+    token_type: string; // default 'bearer'
 }
