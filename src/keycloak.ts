@@ -1,6 +1,7 @@
-import CallbackParser from './callbackParser';
-import LocalStorage from './localStorage';
-import CookieStorage from './cookieStorage';
+import CallbackParser           from './callbackParser';
+import LocalStorage             from './localStorage';
+import CookieStorage            from './cookieStorage';
+import { IKeycloakOptions, IKeycloakInitOptions } from './models';
 
 /*
  * Copyright 2016 Red Hat, Inc. and/or its affiliates
@@ -41,7 +42,7 @@ import CookieStorage from './cookieStorage';
      prompt: string;
  }
 
-const Keycloak = function (config) {
+const Keycloak = function (config: IKeycloakOptions) {
     const kc = this;
     let adapter;
     const refreshQueue = [];
@@ -53,7 +54,7 @@ const Keycloak = function (config) {
         interval: 5
     };
 
-    kc.init = function (initOptions) {
+    kc.init = function (initOptions: IKeycloakInitOptions) {
         kc.authenticated = false;
 
         callbackStorage = createCallbackStorage();

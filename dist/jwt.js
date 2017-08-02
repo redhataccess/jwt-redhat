@@ -57,7 +57,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	"use strict";
 	Object.defineProperty(exports, "__esModule", { value: true });
 	var jwt_1 = __webpack_require__(4);
-	exports.Jwt = jwt_1.default;
+	exports.default = jwt_1.default;
 
 
 /***/ }),
@@ -919,9 +919,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @memberof module:session
 	 * @private
 	 */
-	function init(settings) {
-	    log('[session.js] initializing');
-	    state.keycloak = keycloak_1.default(KEYCLOAK_OPTIONS);
+	function init(keycloakOptions, keycloakInitOptions) {
+	    log('[jwt.js] initializing');
+	    state.keycloak = new keycloak_1.default(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
 	    // wire up our handlers to keycloak's events
 	    state.keycloak.onAuthSuccess = onAuthSuccess;
 	    state.keycloak.onAuthError = onAuthError;
@@ -930,7 +930,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    state.keycloak.onAuthLogout = onAuthLogout;
 	    state.keycloak.onTokenExpired = onTokenExpired;
 	    state.keycloak
-	        .init(KEYCLOAK_INIT_OPTIONS)
+	        .init(keycloakInitOptions ? Object.assign({}, KEYCLOAK_INIT_OPTIONS, keycloakInitOptions) : KEYCLOAK_INIT_OPTIONS)
 	        .success(keycloakInitSuccess)
 	        .error(keycloakInitError);
 	}
@@ -941,7 +941,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @private
 	 */
 	function keycloakInitSuccess(authenticated) {
-	    log('[session.js] initialized (authenticated: ' + authenticated + ')');
+	    log('[jwt.js] initialized (authenticated: ' + authenticated + ')');
 	    if (authenticated) {
 	        setToken(state.keycloak.token);
 	        setRefreshToken(state.keycloak.refreshToken);
@@ -959,20 +959,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	    while (events.init.length) {
 	        var event_1 = events.init.shift();
 	        if (typeof event_1 === 'function') {
-	            log('[session.js] running an init handler');
+	            log('[jwt.js] running an init handler');
 	            event_1(Jwt);
 	        }
 	    }
 	}
 	/**
-	 * Register a function to be called when session.js has initialized.  Runs
+	 * Register a function to be called when jwt.js has initialized.  Runs
 	 * immediately if already initialized.  When called, the function will be
-	 * passed a reference to the session.js API.
+	 * passed a reference to the jwt.js API.
 	 *
 	 * @memberof module:session
 	 */
 	function onInit(func) {
-	    log('[session.js] registering init handler');
+	    log('[jwt.js] registering init handler');
 	    if (state.initialized) {
 	        func(Jwt);
 	    }
@@ -986,7 +986,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @private
 	 */
 	function keycloakInitError() {
-	    log('[session.js] init error');
+	    log('[jwt.js] init error');
 	    keycloakInitHandler();
 	    removeToken();
 	}
@@ -1016,30 +1016,30 @@ return /******/ (function(modules) { // webpackBootstrap
 	        case 'rhn.redhat.com':
 	        case 'hardware.redhat.com':
 	        case 'unified.gsslab.rdu2.redhat.com':
-	            log('[session.js] ENV: prod');
+	            log('[jwt.js] ENV: prod');
 	            return 'https://sso.redhat.com/auth';
 	        // Valid STAGE URLs
 	        case 'access.stage.redhat.com':
 	        case 'accessstage.usersys.redhat.com':
 	        case 'stage.foo.redhat.com':
-	            log('[session.js] ENV: stage');
+	            log('[jwt.js] ENV: stage');
 	            return 'https://sso.stage.redhat.com/auth';
 	        // Valid QA URLs
 	        case 'access.qa.redhat.com':
 	        case 'qa.foo.redhat.com':
 	        case 'accessqa.usersys.redhat.com':
 	        case 'unified-qa.gsslab.pnq2.redhat.com':
-	            log('[session.js] ENV: qa');
+	            log('[jwt.js] ENV: qa');
 	            return 'https://sso.qa.redhat.com/auth';
 	        case 'ui.foo.redhat.com':
-	            log('[session.js] ENV: qa / dev');
+	            log('[jwt.js] ENV: qa / dev');
 	            return 'https://sso.dev1.redhat.com/auth';
 	        // Valid CI URLs
 	        case 'access.devgssci.devlab.phx1.redhat.com':
 	        case 'accessci.usersys.redhat.com':
 	        case 'ci.foo.redhat.com':
 	        default:
-	            log('[session.js] ENV: ci');
+	            log('[jwt.js] ENV: ci');
 	            return 'https://sso.dev2.redhat.com/auth';
 	    }
 	}
@@ -1050,18 +1050,18 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @private
 	 */
 	function onAuthSuccess() {
-	    log('[session.js] onAuthSuccess');
+	    log('[jwt.js] onAuthSuccess');
 	}
 	function onAuthError() {
 	    removeToken();
-	    log('[session.js] onAuthError');
+	    log('[jwt.js] onAuthError');
 	}
 	function onAuthRefreshSuccess() {
-	    log('[session.js] onAuthRefreshSuccess');
+	    log('[jwt.js] onAuthRefreshSuccess');
 	}
-	function onAuthRefreshError() { log('[session.js] onAuthRefreshError'); }
-	function onAuthLogout() { log('[session.js] onAuthLogout'); }
-	function onTokenExpired() { log('[session.js] onTokenExpired'); }
+	function onAuthRefreshError() { log('[jwt.js] onAuthRefreshError'); }
+	function onAuthLogout() { log('[jwt.js] onAuthLogout'); }
+	function onTokenExpired() { log('[jwt.js] onTokenExpired'); }
 	/**
 	 * Refreshes the access token.
 	 *
@@ -1069,7 +1069,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @private
 	 */
 	function updateToken() {
-	    log('[session.js] running updateToken');
+	    log('[jwt.js] running updateToken');
 	    return state.keycloak
 	        .updateToken(REFRESH_TTE)
 	        .success(updateTokenSuccess)
@@ -1103,7 +1103,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @private
 	 */
 	function updateTokenSuccess(refreshed) {
-	    log('[session.js] updateTokenSuccess, token was ' + ['not ', ''][~~refreshed] + 'refreshed');
+	    log('[jwt.js] updateTokenSuccess, token was ' + ['not ', ''][~~refreshed] + 'refreshed');
 	    setToken(state.keycloak.token);
 	    setRefreshToken(state.keycloak.refreshToken);
 	    // setRavenUserContext();
@@ -1115,7 +1115,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @private
 	 */
 	function updateTokenFailure(load_failure) {
-	    log('[session.js] updateTokenFailure');
+	    log('[jwt.js] updateTokenFailure');
 	}
 	/**
 	 * Save the refresh token value in a semi-persistent place (sessionStorage).
@@ -1206,23 +1206,19 @@ return /******/ (function(modules) { // webpackBootstrap
 	function getUserInfo() {
 	    // the properties to return
 	    var token = getToken();
-	    var user = {};
-	    if (token) {
-	        user = {
-	            user_id: token.user_id,
-	            username: token.username,
-	            account_id: token.account_id,
-	            account_number: token.account_number,
-	            email: token.email,
-	            firstName: token.firstName,
-	            lastName: token.lastName,
-	            lang: token.lang,
-	            region: token.region,
-	            login: token.username,
-	            internal: isInternal(),
-	        };
-	    }
-	    return user;
+	    return token ? {
+	        user_id: token.user_id,
+	        username: token.username,
+	        account_id: token.account_id,
+	        account_number: token.account_number,
+	        email: token.email,
+	        firstName: token.firstName,
+	        lastName: token.lastName,
+	        lang: token.lang,
+	        region: token.region,
+	        login: token.username,
+	        internal: isInternal()
+	    } : null;
 	}
 	/**
 	 * Is the user authenticated?
@@ -1254,8 +1250,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @memberof module:session
 	 */
 	function hasRole() {
-	    for (var i = 0; i < arguments.length; ++i) {
-	        if (!state.keycloak.hasRealmRole(arguments[i])) {
+	    var roles = [];
+	    for (var _i = 0; _i < arguments.length; _i++) {
+	        roles[_i] = arguments[_i];
+	    }
+	    if (!roles)
+	        return false;
+	    for (var i = 0; i < roles.length; ++i) {
+	        if (!state.keycloak.hasRealmRole(roles[i])) {
 	            return false;
 	        }
 	    }
@@ -1274,8 +1276,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @return {String} the URL to the login page
 	 * @memberof module:session
 	 */
-	function getLoginUrl(optionsIn) {
-	    var options = optionsIn || {};
+	function getLoginUrl(options) {
+	    if (options === void 0) { options = {}; }
 	    var redirectUri = options.redirectUri || location.href;
 	    options.redirectUri = redirectUri;
 	    return state.keycloak.createLoginUrl(options);
@@ -1297,12 +1299,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	    return state.keycloak.createAccountUrl();
 	}
 	/**
-	 * "Decorator" enforcing that session.js be initialized before the wrapped
+	 * "Decorator" enforcing that jwt.js be initialized before the wrapped
 	 * function will be run.
 	 *
 	 * @memberof module:session
 	 * @private
-	 * @param {Function} func a function which shouldn't be run before session.js is
+	 * @param {Function} func a function which shouldn't be run before jwt.js is
 	 * initialized.
 	 * @return {Function}
 	 */
@@ -1312,7 +1314,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	            return func.apply({}, arguments);
 	        }
 	        else {
-	            console.warn('[session.js] couldn\'t call function, session not initialized');
+	            console.warn('[jwt.js] couldn\'t call function, session not initialized');
 	            return;
 	        }
 	    };
@@ -1326,8 +1328,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @memberof module:session
 	 * @param {Object} options See [options](https://keycloak.gitbooks.io/securing-client-applications-guide/content/v/2.2/topics/oidc/javascript-adapter.html#_login_options) for valid options.
 	 */
-	function login(optionsIn) {
-	    var options = optionsIn || {};
+	function login(options) {
+	    if (options === void 0) { options = {}; }
 	    var redirectUri = options.redirectUri || location.href;
 	    options.redirectUri = redirectUri;
 	    state.keycloak.login(options);
@@ -1337,6 +1339,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @memberof module:session
 	 */
 	function logout(options) {
+	    if (options === void 0) { options = {}; }
 	    removeToken();
 	    removeRefreshToken();
 	    state.keycloak.logout(options);
@@ -1358,7 +1361,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	//     // context to RavenJS, for inclusion in Sentry error reports.
 	//     var data = getUserInfo();
 	//     if (typeof window.Raven !== 'undefined' && typeof window.Raven.setUserContext === 'function') {
-	//         log('[session.js] sent user context to Raven');
+	//         log('[jwt.js] sent user context to Raven');
 	//         Raven.setUserContext({
 	//             account_id: data.account_id,
 	//             account_number: data.account_number,
