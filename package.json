@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "Client side JavaScript library to interact with Red Hat JWT",
   "main": "dist/jwt.js",
-  "types": "src/jwt.d.ts",
+  "types": "src/index.d.ts",
   "scripts": {
     "clean": "rimraf dist",
     "lint": "./node_modules/.bin/tslint 'src/**/*.ts'",

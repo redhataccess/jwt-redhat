@@ -1,5 +1,3 @@
 import Jwt from './jwt';
 
-export {
-    Jwt
-};
+export default Jwt;

@@ -1,6 +1,16 @@
 import Keycloak from './keycloak';
 const jsUri = require('jsuri');
 
+import {
+    IKeycloakOptions,
+    IState,
+    IJwtUser,
+    ILoginOptions,
+    IToken,
+    IKeycloakInitOptions
+} from './models';
+
+
 /*
  * Copyright 2016 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
@@ -198,13 +208,13 @@ const REFRESH_TOKEN_NAME = 'rh_refresh_token';
 const REFRESH_INTERVAL = 1 * 60 * 1000; // ms. check token for upcoming expiration every this many milliseconds
 const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this many seconds from now
 
-const KEYCLOAK_OPTIONS = {
+const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     realm: 'redhat-external',
     clientId: 'unifiedui',
     url: SSO_URL,
 };
 
-const KEYCLOAK_INIT_OPTIONS = {
+const KEYCLOAK_INIT_OPTIONS: IKeycloakInitOptions = {
     responseMode: 'query', // was previously fragment and doesn't work with fragment.
     flow: 'standard',
     token: null,
@@ -219,11 +229,6 @@ const refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
 
 if (token && token !== 'undefined') { KEYCLOAK_INIT_OPTIONS.token = token; }
 if (refreshToken) { KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
-
-interface IState {
-    initialized: boolean;
-    keycloak: any;
-}
 
 const state: IState = {
     initialized: false,
@@ -253,9 +258,9 @@ function log(message: string) {
  * @memberof module:session
  * @private
  */
-function init(settings) {
-    log('[session.js] initializing');
-    state.keycloak = Keycloak(KEYCLOAK_OPTIONS);
+function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): void {
+    log('[jwt.js] initializing');
+    state.keycloak = new Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
 
     // wire up our handlers to keycloak's events
     state.keycloak.onAuthSuccess = onAuthSuccess;
@@ -266,7 +271,7 @@ function init(settings) {
     state.keycloak.onTokenExpired = onTokenExpired;
 
     state.keycloak
-        .init(KEYCLOAK_INIT_OPTIONS)
+        .init(keycloakInitOptions ? Object.assign({}, KEYCLOAK_INIT_OPTIONS, keycloakInitOptions) : KEYCLOAK_INIT_OPTIONS)
         .success(keycloakInitSuccess)
         .error(keycloakInitError);
 }
@@ -278,7 +283,7 @@ function init(settings) {
  * @private
  */
 function keycloakInitSuccess(authenticated) {
-    log('[session.js] initialized (authenticated: ' + authenticated + ')');
+    log('[jwt.js] initialized (authenticated: ' + authenticated + ')');
     if (authenticated) {
         setToken(state.keycloak.token);
         setRefreshToken(state.keycloak.refreshToken);
@@ -298,21 +303,21 @@ function handleInitEvents() {
     while (events.init.length) {
         const event = events.init.shift();
         if (typeof event === 'function') {
-            log('[session.js] running an init handler');
+            log('[jwt.js] running an init handler');
             event(Jwt);
         }
     }
 }
 
 /**
- * Register a function to be called when session.js has initialized.  Runs
+ * Register a function to be called when jwt.js has initialized.  Runs
  * immediately if already initialized.  When called, the function will be
- * passed a reference to the session.js API.
+ * passed a reference to the jwt.js API.
  *
  * @memberof module:session
  */
-function onInit(func) {
-    log('[session.js] registering init handler');
+function onInit(func: Function) {
+    log('[jwt.js] registering init handler');
     if (state.initialized) {
         func(Jwt);
     }
@@ -328,7 +333,7 @@ function onInit(func) {
  * @private
  */
 function keycloakInitError() {
-    log('[session.js] init error');
+    log('[jwt.js] init error');
 
     keycloakInitHandler();
 
@@ -362,14 +367,14 @@ function ssoUrl() {
         case 'rhn.redhat.com':
         case 'hardware.redhat.com':
         case 'unified.gsslab.rdu2.redhat.com':
-            log('[session.js] ENV: prod');
+            log('[jwt.js] ENV: prod');
             return 'https://sso.redhat.com/auth';
 
         // Valid STAGE URLs
         case 'access.stage.redhat.com':
         case 'accessstage.usersys.redhat.com':
         case 'stage.foo.redhat.com':
-            log('[session.js] ENV: stage');
+            log('[jwt.js] ENV: stage');
             return 'https://sso.stage.redhat.com/auth';
 
         // Valid QA URLs
@@ -377,11 +382,11 @@ function ssoUrl() {
         case 'qa.foo.redhat.com':
         case 'accessqa.usersys.redhat.com':
         case 'unified-qa.gsslab.pnq2.redhat.com':
-            log('[session.js] ENV: qa');
+            log('[jwt.js] ENV: qa');
             return 'https://sso.qa.redhat.com/auth';
 
         case 'ui.foo.redhat.com':
-            log('[session.js] ENV: qa / dev');
+            log('[jwt.js] ENV: qa / dev');
             return 'https://sso.dev1.redhat.com/auth';
 
         // Valid CI URLs
@@ -389,7 +394,7 @@ function ssoUrl() {
         case 'accessci.usersys.redhat.com':
         case 'ci.foo.redhat.com':
         default:
-                log('[session.js] ENV: ci');
+                log('[jwt.js] ENV: ci');
                 return 'https://sso.dev2.redhat.com/auth';
         }
 }
@@ -401,20 +406,20 @@ function ssoUrl() {
  * @private
  */
 function onAuthSuccess() {
-    log('[session.js] onAuthSuccess');
+    log('[jwt.js] onAuthSuccess');
 }
 
 function onAuthError() {
     removeToken();
-    log('[session.js] onAuthError');
+    log('[jwt.js] onAuthError');
 }
 
 function onAuthRefreshSuccess() {
-    log('[session.js] onAuthRefreshSuccess');
+    log('[jwt.js] onAuthRefreshSuccess');
 }
-function onAuthRefreshError() { log('[session.js] onAuthRefreshError'); }
-function onAuthLogout() { log('[session.js] onAuthLogout'); }
-function onTokenExpired() { log('[session.js] onTokenExpired'); }
+function onAuthRefreshError() { log('[jwt.js] onAuthRefreshError'); }
+function onAuthLogout() { log('[jwt.js] onAuthLogout'); }
+function onTokenExpired() { log('[jwt.js] onTokenExpired'); }
 
 /**
  * Refreshes the access token.
@@ -422,8 +427,8 @@ function onTokenExpired() { log('[session.js] onTokenExpired'); }
  * @memberof module:session
  * @private
  */
-function updateToken() {
-    log('[session.js] running updateToken');
+function updateToken(): void {
+    log('[jwt.js] running updateToken');
     return state.keycloak
         .updateToken(REFRESH_TTE)
         .success(updateTokenSuccess)
@@ -460,7 +465,7 @@ function refreshLoop() {
  * @private
  */
 function updateTokenSuccess(refreshed) {
-    log('[session.js] updateTokenSuccess, token was ' + ['not ', ''][~~refreshed] + 'refreshed');
+    log('[jwt.js] updateTokenSuccess, token was ' + ['not ', ''][~~refreshed] + 'refreshed');
     setToken(state.keycloak.token);
     setRefreshToken(state.keycloak.refreshToken);
     // setRavenUserContext();
@@ -473,7 +478,7 @@ function updateTokenSuccess(refreshed) {
  * @private
  */
 function updateTokenFailure(load_failure) {
-    log('[session.js] updateTokenFailure');
+    log('[jwt.js] updateTokenFailure');
 }
 
 /**
@@ -557,7 +562,7 @@ function removeToken() {
  * @memberof module:session
  * @return {Object} the parsed JSON Web Token
  */
-function getToken() {
+function getToken(): IToken {
     return state.keycloak.tokenParsed;
 }
 
@@ -568,26 +573,22 @@ function getToken() {
  * @memberof module:session
  * @return {Object} the user information
  */
-function getUserInfo() {
+function getUserInfo(): IJwtUser {
     // the properties to return
     const token = getToken();
-    let user = {};
-    if (token) {
-        user = {
-            user_id: token.user_id,
-            username: token.username,
-            account_id: token.account_id,
-            account_number: token.account_number,
-            email: token.email,
-            firstName: token.firstName,
-            lastName: token.lastName,
-            lang: token.lang,
-            region: token.region,
-            login: token.username,
-            internal: isInternal(),
-        };
-    }
-    return user;
+    return token ? {
+        user_id: token.user_id,
+        username: token.username,
+        account_id: token.account_id,
+        account_number: token.account_number,
+        email: token.email,
+        firstName: token.firstName,
+        lastName: token.lastName,
+        lang: token.lang,
+        region: token.region,
+        login: token.username,
+        internal: isInternal()
+    } : null;
 }
 
 /**
@@ -596,7 +597,7 @@ function getUserInfo() {
  * @memberof module:session
  * @returns {Boolean} true if the user is authenticated, false otherwise
  */
-function isAuthenticated() {
+function isAuthenticated(): boolean {
     return state.keycloak.authenticated;
 }
 
@@ -606,7 +607,7 @@ function isAuthenticated() {
  * @memberof module:session
  * @returns {Boolean} true if the user is a Red Hat employee, otherwise false
  */
-function isInternal() {
+function isInternal(): boolean {
     return state.keycloak.hasRealmRole(INTERNAL_ROLE);
 }
 
@@ -621,9 +622,10 @@ function isInternal() {
  * session.hasRole('role1', 'role2', 'role3');
  * @memberof module:session
  */
-function hasRole() {
-    for (let i = 0; i < arguments.length; ++i) {
-        if (!state.keycloak.hasRealmRole(arguments[i])) {
+function hasRole(...roles: string[]): boolean {
+    if (!roles) return false;
+    for (let i = 0; i < roles.length; ++i) {
+        if (!state.keycloak.hasRealmRole(roles[i])) {
             return false;
         }
     }
@@ -644,9 +646,7 @@ function getRegisterUrl() {
  * @return {String} the URL to the login page
  * @memberof module:session
  */
-function getLoginUrl(optionsIn) {
-    const options = optionsIn || {};
-
+function getLoginUrl(options: ILoginOptions = {}): string {
     const redirectUri = options.redirectUri || location.href;
     options.redirectUri = redirectUri;
     return state.keycloak.createLoginUrl(options);
@@ -657,7 +657,7 @@ function getLoginUrl(optionsIn) {
  * @return {String} the URL to the logout page
  * @memberof module:session
  */
-function getLogoutUrl() {
+function getLogoutUrl(): string {
     return state.keycloak.createLogoutUrl();
 }
 
@@ -666,17 +666,17 @@ function getLogoutUrl() {
  * @return {String} the URL to the account management page
  * @memberof module:session
  */
-function getAccountUrl() {
+function getAccountUrl(): string {
     return state.keycloak.createAccountUrl();
 }
 
 /**
- * "Decorator" enforcing that session.js be initialized before the wrapped
+ * "Decorator" enforcing that jwt.js be initialized before the wrapped
  * function will be run.
  *
  * @memberof module:session
  * @private
- * @param {Function} func a function which shouldn't be run before session.js is
+ * @param {Function} func a function which shouldn't be run before jwt.js is
  * initialized.
  * @return {Function}
  */
@@ -686,7 +686,7 @@ function initialized(func) {
             return func.apply({}, arguments);
         }
         else {
-            console.warn('[session.js] couldn\'t call function, session not initialized');
+            console.warn('[jwt.js] couldn\'t call function, session not initialized');
             return;
         }
     };
@@ -701,9 +701,7 @@ function initialized(func) {
  * @memberof module:session
  * @param {Object} options See [options](https://keycloak.gitbooks.io/securing-client-applications-guide/content/v/2.2/topics/oidc/javascript-adapter.html#_login_options) for valid options.
  */
-function login(optionsIn) {
-    const options = optionsIn || {};
-
+function login(options: ILoginOptions = {}): void {
     const redirectUri = options.redirectUri || location.href;
     options.redirectUri = redirectUri;
     state.keycloak.login(options);
@@ -713,7 +711,7 @@ function login(optionsIn) {
  * Navigate to the logout page, end session, then navigate back.
  * @memberof module:session
  */
-function logout(options) {
+function logout(options: ILoginOptions = {}): void {
     removeToken();
     removeRefreshToken();
     state.keycloak.logout(options);
@@ -723,7 +721,7 @@ function logout(options) {
  * Navigate to the account registration page.
  * @memberof module:session
  */
-function register(options) {
+function register(options): void {
     state.keycloak.register(options);
 }
 
@@ -737,7 +735,7 @@ function register(options) {
 //     // context to RavenJS, for inclusion in Sentry error reports.
 //     var data = getUserInfo();
 //     if (typeof window.Raven !== 'undefined' && typeof window.Raven.setUserContext === 'function') {
-//         log('[session.js] sent user context to Raven');
+//         log('[jwt.js] sent user context to Raven');
 //         Raven.setUserContext({
 //             account_id: data.account_id,
 //             account_number: data.account_number,
