@@ -8,6 +8,10 @@ Create a new servicenow ticket and provide them the information from https://moj
 * Web Origins (Ex. https://unified.gsslab.rdu2.redhat.com)
 * User information required (With Unifiedui we needed the username populated which was the sso and UDS used that as part of the request)
 
+After IAM has created the client profile in their systems, JWT is ready to use.
+
+### Important notes on configurating your env and project for JWT
+
 Note that for testing purposes, you'll probably want to request that your local dev be whitelisted.  You'll need to specifically tell IAM that.  For example UnifiedUI dev is https://ui.foo.redhat.com which binds to localhost.  By default that won't work without some fancy /etc/hosts and/or DNS configuration.  So if they whitelist just dev, it will work easy for testing.  
 
 Note as well that we *highly* recommend you use the accessproxy: https://github.com/redhataccess/accessproxy and add the following /etc/hosts config:
@@ -20,9 +24,9 @@ By default we resolve each <env>.foo.redhat.com to the respective JWT login url.
 
 It may be the case that we'll need to update this project to accomodate your specific url.  I would communicate the following to IAM when opening the ticket.  Communicate the exact url you will be logging in with, and ask if it can be whitelisted.  If they say they will only for dev1/dev2, then we'll need to update this project to include your env specific dev url for dev1 or dev2.  We may be able to parameterize that in the future if needed.
 
-After IAM has created the client profile in their systems, JWT is ready to use.
 
-Here is a snippet of code to use Jwt:
+### Authentication examples
+
 
 // Typescript 
 ```
