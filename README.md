@@ -85,3 +85,7 @@ Jwt.onInit(() => {
     }
 });
 ```
+
+### Debugging
+
+Open the javascript console and run `localStorage.session_log = true`
