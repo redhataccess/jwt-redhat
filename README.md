@@ -19,15 +19,15 @@ import { IKeycloakOptions }           from 'jwt/src/models'
 
 declare global {
     interface Window {
-        Jwt: any;
+        sessionjs: any;
     }
 }
-window.Jwt = Jwt; // this is optional if you want to invoke the same instance elsewhere
-const JwtOptions: Partial<IKeycloakOptions> = {
+window.sessionjs = Jwt; // this is optional if you want to invoke the same instance elsewhere
+const keycloakOptions: Partial<IKeycloakOptions> = {
     clientId: 'unifiedui'
 }
 
-if(window.Jwt) Jwt.init(JwtOptions); // validate session and start the refresh timer
+Jwt.init(keycloakOptions); // validate session and start the refresh timer
 
 // once the session has initialized, ask session.js some questions
 Jwt.onInit(async function () {
@@ -44,13 +44,18 @@ Jwt.onInit(async function () {
 // Javascript 
 ```
 const Jwt = require('jwt');
-window.Jwt = Jwt; // this is optional if you want to invoke the same instance elsewhere
+window.sessionjs = Jwt; // this is optional if you want to invoke the same instance elsewhere
 
-const jwtOptions = {
+const keycloakOptions = {
     clientId: 'unifiedui'
 }
 
-Jwt.init(jwtOptions); // validate session and start the refresh timer
+// the responseMode defaults to fragment, which works fine in ascension, but query was required for UnifiedUI
+const keycloakInitOptions = {
+    responseMode: 'query'
+}
+
+Jwt.init(keycloakOptions, keycloakInitOptions); // validate session and start the refresh timer
 // once the session has initialized, ask session.js some questions
 Jwt.onInit(() => {
     // print user's authentication status, internal status, and their user info
