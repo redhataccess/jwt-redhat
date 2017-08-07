@@ -871,8 +871,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	var INTERNAL_ROLE = 'redhat:employees';
 	var COOKIE_NAME = 'rh_jwt';
 	var REFRESH_TOKEN_NAME = 'rh_refresh_token';
-	var REFRESH_INTERVAL = 1 * 60 * 1000; // ms. check token for upcoming expiration every this many milliseconds
-	var REFRESH_TTE = 90; // seconds. refresh only token if it would expire this many seconds from now
+	var REFRESH_INTERVAL = 1 * 20 * 1000; // ms. check token for upcoming expiration every this many milliseconds
+	var REFRESH_TTE = 30; // seconds. refresh only token if it would expire this many seconds from now
 	var KEYCLOAK_OPTIONS = {
 	    realm: 'redhat-external',
 	    clientId: 'unifiedui',
@@ -989,6 +989,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    log('[jwt.js] init error');
 	    keycloakInitHandler();
 	    removeToken();
+	    removeRefreshToken();
 	}
 	/**
 	 * Does some things after keycloak initializes, whether or not
@@ -1054,6 +1055,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	}
 	function onAuthError() {
 	    removeToken();
+	    removeRefreshToken();
 	    log('[jwt.js] onAuthError');
 	}
 	function onAuthRefreshSuccess() {
@@ -1124,6 +1126,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @private
 	 */
 	function setRefreshToken(refresh_token) {
+	    log('[sessionjs] setting refresh token');
 	    lib.store.local.set(REFRESH_TOKEN_NAME, refresh_token);
 	}
 	/**
@@ -1133,6 +1136,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @private
 	 */
 	function removeRefreshToken() {
+	    log('[sessionjs] removing refresh token');
 	    lib.store.local.remove(REFRESH_TOKEN_NAME);
 	}
 	/**
@@ -1148,6 +1152,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	        // exists so it'll be sent along with AJAX requests.  the
 	        // localStorage value exists so the token can be refreshed even if
 	        // it's been expired for a long time.
+	        log('[jwt.js] setting access token');
 	        lib.store.local.set(COOKIE_NAME, token);
 	        document.cookie = COOKIE_NAME + '=' + token + ';path=/;max-age=' + 5 * 60 + ';domain=.' + origin + ';';
 	    }
@@ -1159,8 +1164,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @private
 	 */
 	function removeToken() {
+	    log('[jwt.js] removing access token');
 	    lib.store.local.remove(COOKIE_NAME);
-	    document.cookie = COOKIE_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/';
+	    document.cookie = COOKIE_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
 	}
 	// init
 	// login
@@ -1195,6 +1201,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	 */
 	function getToken() {
 	    return state.keycloak.tokenParsed;
+	}
+	/* Get a string containing the unparsed, base64-encoded JSON Web Token.
+	*
+	* @memberof module:session
+	* @return {Object} the parsed JSON Web Token
+	*/
+	function getEncodedToken() {
+	    return state.keycloak.token;
 	}
 	/**
 	 * Get the user info from the JSON Web Token.  Contains user information
@@ -1386,6 +1400,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    getLogoutUrl: initialized(getLogoutUrl),
 	    getAccountUrl: initialized(getAccountUrl),
 	    getToken: initialized(getToken),
+	    getEncodedToken: initialized(getEncodedToken),
 	    getUserInfo: initialized(getUserInfo),
 	    updateToken: initialized(updateToken),
 	    onInit: onInit,
