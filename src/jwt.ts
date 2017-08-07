@@ -488,7 +488,7 @@ function updateTokenFailure(load_failure) {
  * @private
  */
 function setRefreshToken(refresh_token) {
-    log('[sessionjs] setting refresh token');
+    log('[jwt.js] setting refresh token');
     lib.store.local.set(REFRESH_TOKEN_NAME, refresh_token);
 }
 
@@ -499,7 +499,7 @@ function setRefreshToken(refresh_token) {
  * @private
  */
 function removeRefreshToken() {
-    log('[sessionjs] removing refresh token');
+    log('[jwt.js] removing refresh token');
     lib.store.local.remove(REFRESH_TOKEN_NAME);
 }
 

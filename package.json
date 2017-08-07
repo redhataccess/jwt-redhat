@@ -1,6 +1,6 @@
 {
   "name": "jwt",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Client side JavaScript library to interact with Red Hat JWT",
   "main": "dist/jwt.js",
   "types": "src/index.d.ts",
