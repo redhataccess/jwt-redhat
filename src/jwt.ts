@@ -205,8 +205,8 @@ const SSO_URL = ssoUrl();
 const INTERNAL_ROLE = 'redhat:employees';
 const COOKIE_NAME = 'rh_jwt';
 const REFRESH_TOKEN_NAME = 'rh_refresh_token';
-const REFRESH_INTERVAL = 1 * 60 * 1000; // ms. check token for upcoming expiration every this many milliseconds
-const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this many seconds from now
+const REFRESH_INTERVAL = 1 * 20 * 1000; // ms. check token for upcoming expiration every this many milliseconds
+const REFRESH_TTE = 30; // seconds. refresh only token if it would expire this many seconds from now
 
 const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     realm: 'redhat-external',
@@ -334,10 +334,9 @@ function onInit(func: Function) {
  */
 function keycloakInitError() {
     log('[jwt.js] init error');
-
     keycloakInitHandler();
-
     removeToken();
+    removeRefreshToken();
 }
 
 /**
@@ -411,6 +410,7 @@ function onAuthSuccess() {
 
 function onAuthError() {
     removeToken();
+    removeRefreshToken();
     log('[jwt.js] onAuthError');
 }
 
@@ -488,6 +488,7 @@ function updateTokenFailure(load_failure) {
  * @private
  */
 function setRefreshToken(refresh_token) {
+    log('[sessionjs] setting refresh token');
     lib.store.local.set(REFRESH_TOKEN_NAME, refresh_token);
 }
 
@@ -498,6 +499,7 @@ function setRefreshToken(refresh_token) {
  * @private
  */
 function removeRefreshToken() {
+    log('[sessionjs] removing refresh token');
     lib.store.local.remove(REFRESH_TOKEN_NAME);
 }
 
@@ -514,6 +516,7 @@ function setToken(token) {
         // exists so it'll be sent along with AJAX requests.  the
         // localStorage value exists so the token can be refreshed even if
         // it's been expired for a long time.
+        log('[jwt.js] setting access token');
         lib.store.local.set(COOKIE_NAME, token);
         document.cookie = COOKIE_NAME + '=' + token + ';path=/;max-age=' + 5 * 60 + ';domain=.' + origin + ';';
     }
@@ -526,8 +529,9 @@ function setToken(token) {
  * @private
  */
 function removeToken() {
+    log('[jwt.js] removing access token');
     lib.store.local.remove(COOKIE_NAME);
-    document.cookie = COOKIE_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/';
+    document.cookie = COOKIE_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
 }
 
 // init
@@ -564,6 +568,15 @@ function removeToken() {
  */
 function getToken(): IToken {
     return state.keycloak.tokenParsed;
+}
+
+/* Get a string containing the unparsed, base64-encoded JSON Web Token.
+*
+* @memberof module:session
+* @return {Object} the parsed JSON Web Token
+*/
+function getEncodedToken(): string {
+    return state.keycloak.token;
 }
 
 /**
@@ -761,6 +774,7 @@ const Jwt = {
     getLogoutUrl: initialized(getLogoutUrl),
     getAccountUrl: initialized(getAccountUrl),
     getToken: initialized(getToken),
+    getEncodedToken: initialized(getEncodedToken),
     getUserInfo: initialized(getUserInfo),
     updateToken: initialized(updateToken),
     onInit: onInit,

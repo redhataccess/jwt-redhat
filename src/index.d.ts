@@ -19,6 +19,7 @@ declare namespace Jwt {
     export function getLogoutUrl(): string;
     export function getAccountUrl(): string;
     export function getToken(): IToken;
+    export function getEncodedToken(): string;
     export function getUserInfo(): IJwtUser;
     export function updateToken(): void;
     export function onInit(func: Function): void;
