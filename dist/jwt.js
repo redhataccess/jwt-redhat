@@ -2145,7 +2145,12 @@ return /******/ (function(modules) { // webpackBootstrap
 	                return;
 	            }
 	            delete loginIframe.callbackMap[data['callbackId']];
-	            if ((!kc.sessionId || kc.sessionId === data['session']) && data['loggedIn']) {
+	            // PCM-5388: If the sso contains an upper case R to start with this case fail on the first token update
+	            // An example is the inequality of:
+	            // kc.sessionId: "redhat-external/f:d61f8ab9-1f78-4fae-88f3-12cd2e576da7:rhn-support-prchavan/2f237b4a-f405-45f0-875a-82712c029304"
+	            // data.session: "redhat-external/f:d61f8ab9-1f78-4fae-88f3-12cd2e576da7:Rhn-support-prchavan/2f237b4a-f405-45f0-875a-82712c029304"
+	            // This is why we are lowercasing the sessionId here.
+	            if ((!kc.sessionId || (kc.sessionId && data['session'] && (kc.sessionId.toLowerCase() === data['session'].toLowerCase()))) && data['loggedIn']) {
 	                promise.setSuccess();
 	            }
 	            else {
