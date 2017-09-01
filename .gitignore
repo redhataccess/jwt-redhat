@@ -1,6 +1,6 @@
 # Created by https://www.gitignore.io/api/linux,macos,windows,intellij,vim,sublimetext,visualstudiocode,dreamweaver,osx,xcode,node
 
-# Now that we are pushing to gitlab we need to push the generated files
+/dist
 /dist-test
 
 ### SublimeText ###
