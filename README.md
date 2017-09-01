@@ -1,3 +1,7 @@
+### Installation
+
+npm install jwt
+
 ### Requesting JWT auth for a new internal webapp
 
 Create a new servicenow ticket and provide them the information from https://mojo.redhat.com/docs/DOC-1142936
