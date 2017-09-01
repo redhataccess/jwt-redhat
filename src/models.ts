@@ -36,10 +36,10 @@ export interface IJwtUser {
 }
 
 export interface IToken {
-    REDHAT_LOGIN: string; // "rhn-support-smendenh"
-    RHAT_LOGIN: string; // "rhn-support-smendenh"
-    account_id: string; // "1979710"
-    account_number: string; // "540155"
+    REDHAT_LOGIN: string; // "rhn-support-<name>"
+    RHAT_LOGIN: string; // "rhn-support-<name>"
+    account_id: string; // "<numbers>"
+    account_number: string; // "<numbers>"
     acr: string; //"1"
     'allowed-origins': string[]; // ["*"]
     aud: string; // "customer-portal"
@@ -47,20 +47,20 @@ export interface IToken {
     azp: string; // "customer-portal"
     client_session: string; 
     country: string; // "US"; 
-    email: string; // "smendenh+qa@redhat.com<200b>"
-    employeeId: string; // "rhn-support-smendenh"
+    email: string; // "<name>+qa@redhat.com<200b>"
+    employeeId: string; // "rhn-support-<name>"
     exp: number; // 1501873015
     firstName: string; // "Samuel"
     iat: number; // 1501872715
-    iss: string; // "https://sso.qa.redhat.com/auth/realms/redhat-external"
+    iss: string; // "https://sso.<env>.redhat.com/auth/realms/redhat-external"
     jti: string;
     lang: string; // "en_US"
-    lastName: string; // "Mendenhall"
+    lastName: string;
     nbf: number; // 0
     nonce: string;
-    organization_id: string; // "00Dm0000000116C"
-    portal_id: string; // "06060000000D0af"
-    realm_access: {roles: string[]} // {roles: ["authenticated", "redhat:employees", ect..]}
+    organization_id: string;
+    portal_id: string;
+    realm_access: {roles: string[]};
     region: string; // "US"
     resource_access: {
         'realm-management': {
@@ -68,12 +68,12 @@ export interface IToken {
         }
     };
     session_state: string;
-    siteID: string; // "redhat"
-    siteId: string; // "redhat"
-    sub: string; // "f:d61f8ab9-1f78-4fae-88f3-12cd2e576da7:rhn-support-smendenh"
+    siteID: string;
+    siteId: string;
+    sub: string; // "f:<hash>:rhn-support-<name>"
     typ: string; // "Bearer"
     user_id: string; // "4677944"
-    username: string; // "rhn-support-smendenh"
+    username: string; // "rhn-support-<name>"
 }
 
 export interface IState {
