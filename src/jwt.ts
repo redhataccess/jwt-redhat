@@ -206,8 +206,8 @@ const SSO_URL = ssoUrl();
 const INTERNAL_ROLE = 'redhat:employees';
 const COOKIE_NAME = 'rh_jwt';
 const REFRESH_TOKEN_NAME = 'rh_refresh_token';
-const REFRESH_INTERVAL = 1 * 20 * 1000; // ms. check token for upcoming expiration every this many milliseconds
-const REFRESH_TTE = 30; // seconds. refresh only token if it would expire this many seconds from now
+const REFRESH_INTERVAL = 1 * 60 * 1000; // ms. check token for upcoming expiration every this many milliseconds
+const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this many seconds from now
 
 const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     realm: 'redhat-external',
