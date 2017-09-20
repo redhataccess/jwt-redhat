@@ -558,7 +558,7 @@ function setToken(token) {
         // it's been expired for a long time.
         log('[jwt.js] setting access token');
         lib.store.local.set(COOKIE_NAME, token);
-        document.cookie = COOKIE_NAME + '=' + token + ';path=/;max-age=' + 5 * 60 + ';domain=.' + origin + ';';
+        document.cookie = COOKIE_NAME + '=' + token + ';path=/;max-age=' + 5 * 60 + ';domain=.' + origin + ';secure;';
     }
 }
 
