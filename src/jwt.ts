@@ -1,5 +1,6 @@
-import Keycloak from './keycloak';
-const jsUri = require('jsuri');
+import Keycloak                 from './keycloak';
+import TokenUpdateScheduler     from './tokenUpdateScheduler';
+const jsUri =                   require('jsuri');
 
 import {
     IKeycloakOptions,
@@ -252,6 +253,32 @@ function log(message: string) {
     } catch (e) { }
 }
 
+function isLocalStorageAvailable() {
+    const test = 'test-local-storage';
+    try {
+        localStorage.setItem(test, test);
+        localStorage.removeItem(test);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+const tokenUpdateScheduler = isLocalStorageAvailable() ? new TokenUpdateScheduler() : null;
+if (tokenUpdateScheduler) {
+    tokenUpdateScheduler.logMessage = function (data) {
+        log(`[jwt.js] [Token Update Scheduler] ${data.text}`);
+    };
+
+    tokenUpdateScheduler.masterDidChange = function () {
+        log(`[jwt.js] [Token Update Scheduler] This tab became ${this.isMaster ? 'master' : 'slave'}`);
+    };
+
+    // Call this to log out if the current tab is master or slave
+    tokenUpdateScheduler.masterDidChange();
+}
+
+
 /**
  * Kicks off all the session-related things.
  *
@@ -428,11 +455,24 @@ function onTokenExpired() { log('[jwt.js] onTokenExpired'); }
  * @private
  */
 function updateToken(): void {
-    log('[jwt.js] running updateToken');
-    return state.keycloak
-        .updateToken(REFRESH_TTE)
-        .success(updateTokenSuccess)
-        .error(updateTokenFailure);
+    if (isLocalStorageAvailable && tokenUpdateScheduler) {
+        if (tokenUpdateScheduler.isMaster) {
+            log('[jwt.js] running updateToken as this tab is master');
+            return state.keycloak
+                .updateToken(REFRESH_TTE)
+                .success(updateTokenSuccess)
+                .error(updateTokenFailure);
+        } else {
+            log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
+        }
+    } else {
+        log('[jwt.js] running updateToken (without cross-tab communcation)');
+        return state.keycloak
+            .updateToken(REFRESH_TTE)
+            .success(updateTokenSuccess)
+            .error(updateTokenFailure);
+    }
+
 }
 
 /**
@@ -464,7 +504,7 @@ function refreshLoop() {
  * @memberof module:session
  * @private
  */
-function updateTokenSuccess(refreshed) {
+function updateTokenSuccess(refreshed: boolean) {
     log('[jwt.js] updateTokenSuccess, token was ' + ['not ', ''][~~refreshed] + 'refreshed');
     setToken(state.keycloak.token);
     setRefreshToken(state.keycloak.refreshToken);
