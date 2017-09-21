@@ -1,3 +1,5 @@
+import { ISimplePromise } from './simulatedPromise';
+
 import { 
     ILoginOptions,
     IToken,
@@ -21,7 +23,9 @@ declare namespace Jwt {
     export function getToken(): IToken;
     export function getEncodedToken(): string;
     export function getUserInfo(): IJwtUser;
-    export function updateToken(): void;
+    export function updateToken(force?: boolean): ISimplePromise;
+    export function cancelRefreshLoop(shouldStopTokenUpdates?: boolean);
+    export function startRefreshLoop(): void;
     export function onInit(func: Function): void;
     export function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): void;
     export const _state: IState;

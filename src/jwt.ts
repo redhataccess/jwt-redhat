@@ -3,6 +3,11 @@ import TokenUpdateScheduler     from './tokenUpdateScheduler';
 const jsUri =                   require('jsuri');
 
 import {
+    createPromise,
+    ISimplePromise
+} from './simulatedPromise';
+
+import {
     IKeycloakOptions,
     IState,
     IJwtUser,
@@ -278,6 +283,9 @@ if (tokenUpdateScheduler) {
     tokenUpdateScheduler.masterDidChange();
 }
 
+// Keep track of the setInterval for the refresh token so we can cancel it and restart it if need be
+let refreshIntervalId;
+let stopTokenUpdates: boolean = false;
 
 /**
  * Kicks off all the session-related things.
@@ -454,12 +462,18 @@ function onTokenExpired() { log('[jwt.js] onTokenExpired'); }
  * @memberof module:session
  * @private
  */
-function updateToken(): void {
+function updateToken(force?: boolean): ISimplePromise {
+    if (stopTokenUpdates === true) {
+        log('[jwt.js] Not updating the token as stopTokenUpdates is set to true.');
+        const promise = createPromise();
+        promise.setError();
+        return promise.promise;
+    }
     if (isLocalStorageAvailable && tokenUpdateScheduler) {
         if (tokenUpdateScheduler.isMaster) {
             log('[jwt.js] running updateToken as this tab is master');
             return state.keycloak
-                .updateToken(REFRESH_TTE)
+                .updateToken(force === true ? -1 : REFRESH_TTE)
                 .success(updateTokenSuccess)
                 .error(updateTokenFailure);
         } else {
@@ -468,7 +482,7 @@ function updateToken(): void {
     } else {
         log('[jwt.js] running updateToken (without cross-tab communcation)');
         return state.keycloak
-            .updateToken(REFRESH_TTE)
+            .updateToken(force === true ? -1 : REFRESH_TTE)
             .success(updateTokenSuccess)
             .error(updateTokenFailure);
     }
@@ -477,14 +491,35 @@ function updateToken(): void {
 
 /**
  * Start the {@link module:session.refreshLoop refreshLoop}, which
- * periodically updates the authentication token.
+ * periodically updates the authentication token.  This should only ever
+ * be called manually if manually first cancelling the refresh loop
  *
  * @memberof module:session
  * @private
  */
 function startRefreshLoop() {
+    stopTokenUpdates = false;
     refreshLoop();
-    setInterval(refreshLoop, REFRESH_INTERVAL);
+    if (!refreshIntervalId) {
+        refreshIntervalId = setInterval(refreshLoop, REFRESH_INTERVAL);
+    } else {
+        log('[jwt.js] Cannot start refresh loop as it is already started.');
+    }
+}
+
+/**
+ * Cancel the {@link module:session.refreshLoop refreshLoop}
+ * @memberof module:session
+ * @private
+ */
+function cancelRefreshLoop(shouldStopTokenUpdates?: boolean) {
+    if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        log('[jwt.js] token refresh interval cancelled');
+    }
+    if (shouldStopTokenUpdates === true) {
+        stopTokenUpdates = true;
+    }
 }
 
 /**
@@ -817,6 +852,8 @@ const Jwt = {
     getEncodedToken: initialized(getEncodedToken),
     getUserInfo: initialized(getUserInfo),
     updateToken: initialized(updateToken),
+    cancelRefreshLoop: initialized(cancelRefreshLoop),
+    startRefreshLoop: initialized(startRefreshLoop),
     onInit: onInit,
     init: init,
     _state: state,
