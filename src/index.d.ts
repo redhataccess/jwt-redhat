@@ -26,6 +26,7 @@ declare namespace Jwt {
     export function updateToken(force?: boolean): ISimplePromise;
     export function cancelRefreshLoop(shouldStopTokenUpdates?: boolean);
     export function startRefreshLoop(): void;
+    export function isTokenExpired(): boolean;
     export function onInit(func: Function): void;
     export function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): void;
     export const _state: IState;

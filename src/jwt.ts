@@ -211,7 +211,8 @@ const SSO_URL = ssoUrl();
 const INTERNAL_ROLE = 'redhat:employees';
 const COOKIE_NAME = 'rh_jwt';
 const REFRESH_TOKEN_NAME = 'rh_refresh_token';
-const REFRESH_INTERVAL = 1 * 60 * 1000; // ms. check token for upcoming expiration every this many milliseconds
+const TOKEN_EXP_TTE = 60; // Seconds to check forward if the token will expire
+const REFRESH_INTERVAL = 1 * TOKEN_EXP_TTE * 1000; // ms. check token for upcoming expiration every this many milliseconds
 const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this many seconds from now
 
 const KEYCLOAK_OPTIONS: IKeycloakOptions = {
@@ -456,6 +457,26 @@ function onAuthRefreshError() { log('[jwt.js] onAuthRefreshError'); }
 function onAuthLogout() { log('[jwt.js] onAuthLogout'); }
 function onTokenExpired() { log('[jwt.js] onTokenExpired'); }
 
+/**
+ * Checks if the token is expired
+ *
+ * @memberof module:session
+ * @private
+ */
+function isTokenExpired(): boolean {
+    if (isLocalStorageAvailable && tokenUpdateScheduler) {
+        if (tokenUpdateScheduler.isMaster) {
+            return state.keycloak.isTokenExpired(TOKEN_EXP_TTE) === true;
+        } else {
+            // If the instance is a slave, then the getToken exp will always be out of date
+            // most likely resulting in a -1 timeSkew so we should just return false here
+            // as the master is responsible for keeping the token in check
+            return false;
+        }
+    } else {
+        return state.keycloak.isTokenExpired(REFRESH_INTERVAL) === true;
+    }
+}
 /**
  * Refreshes the access token.
  *
@@ -859,6 +880,7 @@ const Jwt = {
     updateToken: initialized(updateToken),
     cancelRefreshLoop: initialized(cancelRefreshLoop),
     startRefreshLoop: initialized(startRefreshLoop),
+    isTokenExpired: initialized(isTokenExpired),
     onInit: onInit,
     init: init,
     _state: state,
