@@ -478,6 +478,11 @@ function updateToken(force?: boolean): ISimplePromise {
                 .error(updateTokenFailure);
         } else {
             log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
+            // TODO -- consider broadcasting a message to the master to update.
+            // Also consider the implications of default returning a setSuccess here
+            const promise = createPromise();
+            promise.setSuccess();
+            return promise.promise;
         }
     } else {
         log('[jwt.js] running updateToken (without cross-tab communcation)');
