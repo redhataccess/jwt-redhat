@@ -21,6 +21,7 @@ declare namespace Jwt {
     export function getLogoutUrl(): string;
     export function getAccountUrl(): string;
     export function getToken(): IToken;
+    export function getStoredTokenValue(): string;
     export function getEncodedToken(): string;
     export function getUserInfo(): IJwtUser;
     export function updateToken(force?: boolean): ISimplePromise;

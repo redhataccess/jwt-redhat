@@ -1,5 +1,5 @@
 import Keycloak                 from './keycloak';
-import TokenUpdateScheduler     from './tokenUpdateScheduler';
+import TokenUpdateScheduler, { IUpdateTokenEvent } from './tokenUpdateScheduler';
 const jsUri =                   require('jsuri');
 
 import {
@@ -76,6 +76,7 @@ const private_functions = {
                 }
             };
         }
+        // The get and set here are used exclusively for getting and setting the token and refreshToken which are strings.
         return {
             get: function get(key) {
                 const value = store.getItem(key);
@@ -209,7 +210,7 @@ const lib = {
 
 const SSO_URL = ssoUrl();
 const INTERNAL_ROLE = 'redhat:employees';
-const COOKIE_NAME = 'rh_jwt';
+const TOKEN_NAME = 'rh_jwt';
 const REFRESH_TOKEN_NAME = 'rh_refresh_token';
 const TOKEN_EXP_TTE = 60; // Seconds to check forward if the token will expire
 const REFRESH_INTERVAL = 1 * TOKEN_EXP_TTE * 1000; // ms. check token for upcoming expiration every this many milliseconds
@@ -231,7 +232,7 @@ const KEYCLOAK_INIT_OPTIONS: IKeycloakInitOptions = {
 const origin = location.hostname;
 // const originWithPort = location.hostname + (location.port ? ':' + location.port : '');
 
-const token = lib.store.local.get(COOKIE_NAME) || lib.getCookieValue(COOKIE_NAME);
+const token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
 const refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
 
 if (token && token !== 'undefined') { KEYCLOAK_INIT_OPTIONS.token = token; }
@@ -246,7 +247,7 @@ const events = {
     init: [],
 };
 
-document.cookie = COOKIE_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/';
+document.cookie = TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
 
 /**
  * Log session-related messages to the console, in pre-prod environments.
@@ -282,6 +283,17 @@ if (tokenUpdateScheduler) {
 
     // Call this to log out if the current tab is master or slave
     tokenUpdateScheduler.masterDidChange();
+
+    tokenUpdateScheduler.updateTokenEvent = function (data: IUpdateTokenEvent) {
+        if (!tokenUpdateScheduler.isMaster && data && data.token) {
+            log(`[jwt.js] [Token Update Scheduler] Updating token in this slave tab.`);
+            state.keycloak.setToken(data.token, data.refreshToken, data.idToken, data.timeLocal);
+        }
+        if (!tokenUpdateScheduler.isMaster && data && data.refreshToken) {
+            log(`[jwt.js] [Token Update Scheduler] Updating refresh token in this slave tab.`);
+            state.keycloak.setToken(data.token, data.refreshToken, data.idToken, data.timeLocal);
+        }
+    };
 }
 
 // Keep track of the setInterval for the refresh token so we can cancel it and restart it if need be
@@ -591,6 +603,7 @@ function updateTokenFailure(load_failure) {
 function setRefreshToken(refresh_token) {
     log('[jwt.js] setting refresh token');
     lib.store.local.set(REFRESH_TOKEN_NAME, refresh_token);
+    broadcastUpdatedToken();
 }
 
 /**
@@ -602,6 +615,18 @@ function setRefreshToken(refresh_token) {
 function removeRefreshToken() {
     log('[jwt.js] removing refresh token');
     lib.store.local.remove(REFRESH_TOKEN_NAME);
+}
+
+function broadcastUpdatedToken() {
+    if (tokenUpdateScheduler) {
+        const tokenUpdateData: IUpdateTokenEvent = {
+            token: state.keycloak.token,
+            refreshToken: state.keycloak.refreshRoken,
+            idToken: state.keycloak.idToken,
+            timeLocal: state.keycloak.timeLocal
+        };
+        tokenUpdateScheduler.broadcast('updateTokenEvent', tokenUpdateData);
+    }
 }
 
 /**
@@ -618,8 +643,9 @@ function setToken(token) {
         // localStorage value exists so the token can be refreshed even if
         // it's been expired for a long time.
         log('[jwt.js] setting access token');
-        lib.store.local.set(COOKIE_NAME, token);
-        document.cookie = COOKIE_NAME + '=' + token + ';path=/;max-age=' + 5 * 60 + ';domain=.' + origin + ';secure;';
+        lib.store.local.set(TOKEN_NAME, token);
+        document.cookie = TOKEN_NAME + '=' + token + ';path=/;max-age=' + 5 * 60 + ';domain=.' + origin + ';secure;';
+        broadcastUpdatedToken();
     }
 }
 
@@ -631,8 +657,8 @@ function setToken(token) {
  */
 function removeToken() {
     log('[jwt.js] removing access token');
-    lib.store.local.remove(COOKIE_NAME);
-    document.cookie = COOKIE_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
+    lib.store.local.remove(TOKEN_NAME);
+    document.cookie = TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
 }
 
 // init
@@ -669,6 +695,24 @@ function removeToken() {
  */
 function getToken(): IToken {
     return state.keycloak.tokenParsed;
+}
+
+/**
+ * Get the token value stored in the lib.  This method should always be used to get the token value
+ * when constructing ajax calls in apps depending on jwt.js.  This ensures that the token is being
+ * fetched from localStorage which is cross tab vs. on the keycloak instance which is per tab.
+ *
+ * If this method falls back to the getCookieValue, which I believe is per tab, then it still may succumb
+ * to token expired errors to due to stale
+ *
+ * Note that the token is technically kept in sync across tabs, but this is the safest function to access
+ * the latest token with
+ *
+ * @memberof module:session
+ * @return {Object} the parsed JSON Web Token
+ */
+function getStoredTokenValue(): string {
+    return lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
 }
 
 /* Get a string containing the unparsed, base64-encoded JSON Web Token.
@@ -875,6 +919,7 @@ const Jwt = {
     getLogoutUrl: initialized(getLogoutUrl),
     getAccountUrl: initialized(getAccountUrl),
     getToken: initialized(getToken),
+    getStoredTokenValue: initialized(getStoredTokenValue),
     getEncodedToken: initialized(getEncodedToken),
     getUserInfo: initialized(getUserInfo),
     updateToken: initialized(updateToken),
