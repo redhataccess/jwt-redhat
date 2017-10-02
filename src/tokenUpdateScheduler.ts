@@ -1,5 +1,12 @@
 const localStorageFieldName = 'token-update-scheduler';
 
+export interface IUpdateTokenEvent {
+    token: string;
+    refreshToken: string;
+    idToken: string;
+    timeLocal: number;
+}
+
 // https://blog.fastmail.com/2012/11/26/inter-tab-communication-using-local-storage/
 function TokenUpdateScheduler () {
     const now = Date.now();

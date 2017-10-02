@@ -27,7 +27,6 @@ export default class LocalStorage {
 
     get (state) {
         if (!state) return;
-
         const key = 'kc-callback-' + state;
         let value = localStorage.getItem(key);
         if (value) {

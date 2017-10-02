@@ -172,7 +172,7 @@ const Keycloak = function (config: IKeycloakOptions) {
                 });
             } else if (initOptions) {
                 if (initOptions.token || initOptions.refreshToken) {
-                    setToken(initOptions.token, initOptions.refreshToken, initOptions.idToken, null);
+                    kc.setToken(initOptions.token, initOptions.refreshToken, initOptions.idToken, null);
 
                     if (loginIframe.enable) {
                         setupCheckLoginIframe().success(function() {
@@ -435,7 +435,7 @@ const Keycloak = function (config: IKeycloakOptions) {
 
                                 const tokenResponse = JSON.parse(req.responseText);
 
-                                setToken(tokenResponse['access_token'], tokenResponse['refresh_token'], tokenResponse['id_token'], timeLocal);
+                                kc.setToken(tokenResponse['access_token'], tokenResponse['refresh_token'], tokenResponse['id_token'], timeLocal);
 
                                 kc.onAuthRefreshSuccess && kc.onAuthRefreshSuccess();
                                 for (let p = refreshQueue.pop(); p != null; p = refreshQueue.pop()) {
@@ -471,7 +471,7 @@ const Keycloak = function (config: IKeycloakOptions) {
 
     kc.clearToken = function() {
         if (kc.token) {
-            setToken(null, null, null, null);
+            kc.setToken(null, null, null, null);
             kc.onAuthLogout && kc.onAuthLogout();
             if (kc.loginRequired) {
                 kc.login();
@@ -552,7 +552,7 @@ const Keycloak = function (config: IKeycloakOptions) {
         function authSuccess(accessToken, refreshToken, idToken, fulfillPromise) {
             timeLocal = (timeLocal + new Date().getTime()) / 2;
 
-            setToken(accessToken, refreshToken, idToken, timeLocal);
+            kc.setToken(accessToken, refreshToken, idToken, timeLocal);
 
             if ((kc.tokenParsed && kc.tokenParsed.nonce !== oauth.storedNonce) ||
                 (kc.refreshTokenParsed && kc.refreshTokenParsed.nonce !== oauth.storedNonce) ||
@@ -633,7 +633,7 @@ const Keycloak = function (config: IKeycloakOptions) {
         return promise.promise;
     }
 
-    function setToken(token: ITokenResponse, refreshToken, idToken, timeLocal) {
+    kc.setToken = function (token: ITokenResponse, refreshToken, idToken, timeLocal) {
         if (kc.tokenTimeoutHandle) {
             clearTimeout(kc.tokenTimeoutHandle);
             kc.tokenTimeoutHandle = null;
@@ -653,6 +653,7 @@ const Keycloak = function (config: IKeycloakOptions) {
             kc.resourceAccess = kc.tokenParsed.resource_access;
 
             if (timeLocal) {
+                kc.timeLocal = timeLocal;
                 kc.timeSkew = Math.floor(timeLocal / 1000) - kc.tokenParsed.iat;
             } else {
                 kc.timeSkew = -1;
@@ -696,7 +697,7 @@ const Keycloak = function (config: IKeycloakOptions) {
             delete kc.idToken;
             delete kc.idTokenParsed;
         }
-    }
+    };
 
     function decodeToken(str) {
         str = str.split('.')[1];
