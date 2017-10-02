@@ -285,12 +285,8 @@ if (tokenUpdateScheduler) {
     tokenUpdateScheduler.masterDidChange();
 
     tokenUpdateScheduler.updateTokenEvent = function (data: IUpdateTokenEvent) {
-        if (!tokenUpdateScheduler.isMaster && data && data.token) {
-            log(`[jwt.js] [Token Update Scheduler] Updating token in this slave tab.`);
-            state.keycloak.setToken(data.token, data.refreshToken, data.idToken, data.timeLocal);
-        }
-        if (!tokenUpdateScheduler.isMaster && data && data.refreshToken) {
-            log(`[jwt.js] [Token Update Scheduler] Updating refresh token in this slave tab.`);
+        if (!tokenUpdateScheduler.isMaster && data) {
+            log(`[jwt.js] [Token Update Scheduler] calling keycloak setToken on this slave tab to update with the refreshed master token.`);
             state.keycloak.setToken(data.token, data.refreshToken, data.idToken, data.timeLocal);
         }
     };
