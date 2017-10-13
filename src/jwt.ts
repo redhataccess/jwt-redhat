@@ -1,6 +1,11 @@
-import Keycloak                 from './keycloak';
-import TokenUpdateScheduler, { IUpdateTokenEvent } from './tokenUpdateScheduler';
-const jsUri =                   require('jsuri');
+const Keycloak          = require('./keycloak');
+const jsUri             = require('jsuri');
+import { Keycloak }     from '../@types/keycloak';
+
+import {
+    TokenUpdateScheduler,
+    IUpdateTokenEvent
+} from './tokenUpdateScheduler';
 
 import {
     createPromise,
@@ -13,9 +18,20 @@ import {
     IJwtUser,
     ILoginOptions,
     IToken,
-    IKeycloakInitOptions
+    IKeycloakInitOptions,
+    ITokenUpdateFailure
 } from './models';
 
+declare global {
+    interface Window {
+        Raven: any;
+    }
+}
+
+declare const Raven: {
+    setUserContext: any;
+    captureException: any;
+};
 
 /*
  * Copyright 2016 Red Hat, Inc. and/or its affiliates
@@ -215,6 +231,8 @@ const REFRESH_TOKEN_NAME = 'rh_refresh_token';
 const TOKEN_EXP_TTE = 60; // Seconds to check forward if the token will expire
 const REFRESH_INTERVAL = 1 * TOKEN_EXP_TTE * 1000; // ms. check token for upcoming expiration every this many milliseconds
 const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this many seconds from now
+const RETRY_FAILED_TOKEN_UPDATE_COUNT = 1; // number of times to rety the failed token update
+let userInfo: IJwtUser;  // To be used to set the user context in Raven
 
 const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     realm: 'redhat-external',
@@ -222,7 +240,7 @@ const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     url: SSO_URL,
 };
 
-const KEYCLOAK_INIT_OPTIONS: IKeycloakInitOptions = {
+const KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
     responseMode: 'query', // was previously fragment and doesn't work with fragment.
     flow: 'standard',
     token: null,
@@ -287,7 +305,7 @@ if (tokenUpdateScheduler) {
     tokenUpdateScheduler.updateTokenEvent = function (data: IUpdateTokenEvent) {
         if (!tokenUpdateScheduler.isMaster && data) {
             log(`[jwt.js] [Token Update Scheduler] calling keycloak setToken on this slave instance to update with the refreshed master token.`);
-            state.keycloak.setToken(data.token, data.refreshToken, data.idToken, data.timeLocal);
+            state.keycloak.setToken(data.token as any, data.refreshToken, data.idToken, data.timeLocal);
         }
     };
 }
@@ -304,7 +322,7 @@ let stopTokenUpdates: boolean = false;
  */
 function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): void {
     log('[jwt.js] initializing');
-    state.keycloak = new Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
+    state.keycloak = Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
 
     // wire up our handlers to keycloak's events
     state.keycloak.onAuthSuccess = onAuthSuccess;
@@ -486,12 +504,13 @@ function isTokenExpired(): boolean {
     }
 }
 /**
- * Refreshes the access token.
+ * Refreshes the access token.  Recursively can be called with an iteration count
+ * where the function will retry x number of times.
  *
  * @memberof module:session
  * @private
  */
-function updateToken(force?: boolean): ISimplePromise {
+function updateToken(force: boolean = false, iteration: number = 0): ISimplePromise {
     if (stopTokenUpdates === true) {
         log('[jwt.js] Not updating the token as stopTokenUpdates is set to true.');
         const promise = createPromise();
@@ -504,7 +523,16 @@ function updateToken(force?: boolean): ISimplePromise {
             return state.keycloak
                 .updateToken(force === true ? -1 : REFRESH_TTE)
                 .success(updateTokenSuccess)
-                .error(updateTokenFailure);
+                // ITokenUpdateFailure
+                .error((e: any) => {
+                    if (iteration < RETRY_FAILED_TOKEN_UPDATE_COUNT) {
+                        log(`[jwt.js] update token failed, retrying up to ${RETRY_FAILED_TOKEN_UPDATE_COUNT} time(s)`);
+                        updateToken(force, iteration + 1);
+                    } else {
+                        log(`[jwt.js] update token failed, already retried ${RETRY_FAILED_TOKEN_UPDATE_COUNT} time(s)`);
+                        updateTokenFailure(e);
+                    }
+                });
         } else {
             log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
             // TODO -- consider broadcasting a message to the master to update.
@@ -518,7 +546,16 @@ function updateToken(force?: boolean): ISimplePromise {
         return state.keycloak
             .updateToken(force === true ? -1 : REFRESH_TTE)
             .success(updateTokenSuccess)
-            .error(updateTokenFailure);
+            // ITokenUpdateFailure
+            .error((e: any) => {
+                if (iteration < RETRY_FAILED_TOKEN_UPDATE_COUNT) {
+                    log(`[jwt.js] update token failed, retrying up to ${RETRY_FAILED_TOKEN_UPDATE_COUNT} time(s)`);
+                    updateToken(force, iteration + 1);
+                } else {
+                    log(`[jwt.js] update token failed, already retried ${RETRY_FAILED_TOKEN_UPDATE_COUNT} time(s)`);
+                    updateTokenFailure(e);
+                }
+            });
     }
 
 }
@@ -577,7 +614,13 @@ function updateTokenSuccess(refreshed: boolean) {
     log('[jwt.js] updateTokenSuccess, token was ' + ['not ', ''][~~refreshed] + 'refreshed');
     setToken(state.keycloak.token);
     setRefreshToken(state.keycloak.refreshToken);
-    // setRavenUserContext();
+    try {
+        if ((refreshed && !userInfo) || (refreshed && userInfo && (userInfo.username !== getUserInfo().username))) {
+            setRavenUserContext();
+        }
+    } catch (e) {
+        log(`[jwt.js] Could not set Raven user context due to: ${e.message}`);
+    }
 }
 
 /**
@@ -586,8 +629,9 @@ function updateTokenSuccess(refreshed: boolean) {
  * @memberof module:session
  * @private
  */
-function updateTokenFailure(load_failure) {
+function updateTokenFailure(e: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
+    sendToSentry(new Error('Update token failure'), e);
 }
 
 /**
@@ -617,7 +661,7 @@ function broadcastUpdatedToken() {
     if (tokenUpdateScheduler) {
         const tokenUpdateData: IUpdateTokenEvent = {
             token: state.keycloak.token,
-            refreshToken: state.keycloak.refreshRoken,
+            refreshToken: state.keycloak.refreshToken,
             idToken: state.keycloak.idToken,
             timeLocal: state.keycloak.timeLocal
         };
@@ -690,7 +734,8 @@ function removeToken() {
  * @return {Object} the parsed JSON Web Token
  */
 function getToken(): IToken {
-    return state.keycloak.tokenParsed;
+    // any here as actual RH tokens have more information than this, which we will customize with IToken above
+    return state.keycloak.tokenParsed as any;
 }
 
 /**
@@ -732,6 +777,7 @@ function getUserInfo(): IJwtUser {
     const token = getToken();
     return token ? {
         user_id: token.user_id,
+        id: token.user_id,
         username: token.username,
         account_id: token.account_id,
         account_number: token.account_number,
@@ -879,29 +925,34 @@ function register(options): void {
     state.keycloak.register(options);
 }
 
-// /**
-//  * Send current user context to Raven (JS error logging library).
-//  * @memberof module:session
-//  * @private
-//  */
-// function setRavenUserContext() {
-//     // once the user info service has returned, use its data to add user
-//     // context to RavenJS, for inclusion in Sentry error reports.
-//     var data = getUserInfo();
-//     if (typeof window.Raven !== 'undefined' && typeof window.Raven.setUserContext === 'function') {
-//         log('[jwt.js] sent user context to Raven');
-//         Raven.setUserContext({
-//             account_id: data.account_id,
-//             account_number: data.account_number,
-//             email: data.email,
-//             internal: data.internal,
-//             lang: data.lang,
-//             login: data.login,
-//             name: data.name,
-//             id: data.user_id
-//         });
-//     }
-// }
+/**
+ * Send current user context to Raven (JS error logging library).
+ * @memberof module:session
+ * @private
+ */
+function setRavenUserContext() {
+    // once the user info service has returned, use its data to add user
+    // context to RavenJS, for inclusion in Sentry error reports.
+    userInfo = getUserInfo();
+    if (typeof window.Raven !== 'undefined' && typeof window.Raven.setUserContext === 'function') {
+        log('[jwt.js] sent user context to Raven');
+        Raven.setUserContext(userInfo);
+    }
+}
+
+/**
+ * Send current user context to Raven (JS error logging library).
+ * @memberof module:session
+ * @private
+ */
+function sendToSentry(error: Error, extra: Object) {
+    // once the user info service has returned, use its data to add user
+    // context to RavenJS, for inclusion in Sentry error reports.
+    userInfo = getUserInfo();
+    if (typeof window.Raven !== 'undefined' && typeof window.Raven.captureException === 'function') {
+        Raven.captureException(error, {extra: extra});
+    }
+}
 
 const Jwt = {
     login: initialized(login),

@@ -8,7 +8,7 @@ export interface IUpdateTokenEvent {
 }
 
 // https://blog.fastmail.com/2012/11/26/inter-tab-communication-using-local-storage/
-function TokenUpdateScheduler () {
+export function TokenUpdateScheduler () {
     const now = Date.now();
     let ping = 0;
     try {
@@ -108,5 +108,3 @@ TokenUpdateScheduler.prototype.broadcast = function ( type, event ) {
         );
     } catch ( error ) {}
 };
-
-export default TokenUpdateScheduler;

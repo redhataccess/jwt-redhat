@@ -11,7 +11,11 @@
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "node",
     "allowJs": true,
-    "noUnusedLocals": true
+    "noUnusedLocals": true,
+    "typeRoots": [
+      "node_modules/@types",
+      "@types"
+    ]
   },
   "exclude": [
     "node_modules"

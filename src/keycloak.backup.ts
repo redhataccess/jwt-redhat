@@ -6,7 +6,8 @@ import { createPromise }        from './simulatedPromise';
 import {
     IKeycloakOptions,
     IKeycloakInitOptions,
-    ITokenResponse
+    ITokenResponse,
+    ITokenUpdateFailure
 } from './models';
 
 /*
@@ -374,12 +375,16 @@ const Keycloak = function (config: IKeycloakOptions) {
         return promise.promise;
     };
 
+    kc.expiresIn = function () {
+        return kc.tokenParsed['exp'] - Math.ceil(new Date().getTime() / 1000) + kc.timeSkew;
+    };
+
     kc.isTokenExpired = function(minValidity) {
         if (!kc.tokenParsed || (!kc.refreshToken && kc.flow !== 'implicit' )) {
             throw 'Not authenticated';
         }
 
-        let expiresIn = kc.tokenParsed['exp'] - Math.ceil(new Date().getTime() / 1000) + kc.timeSkew;
+        let expiresIn = kc.expiresIn();
         if (minValidity) {
             expiresIn -= minValidity;
         }
@@ -396,13 +401,16 @@ const Keycloak = function (config: IKeycloakOptions) {
 
         minValidity = minValidity || 5;
 
+        const tokenExpired = kc.isTokenExpired(minValidity);
+        const expiresIn = kc.expiresIn();
+
         const exec = function() {
             let refreshToken = false;
             if (kc.timeSkew === -1) {
                 refreshToken = true;
             } else if (minValidity === -1) {
                 refreshToken = true;
-            } else if (kc.isTokenExpired(minValidity)) {
+            } else if (tokenExpired) {
                 refreshToken = true;
             }
 
@@ -438,18 +446,32 @@ const Keycloak = function (config: IKeycloakOptions) {
                                 kc.setToken(tokenResponse['access_token'], tokenResponse['refresh_token'], tokenResponse['id_token'], timeLocal);
 
                                 kc.onAuthRefreshSuccess && kc.onAuthRefreshSuccess();
+
+                                // If there have been any other token updates queued up, go ahead and resolve all of them as successful
                                 for (let p = refreshQueue.pop(); p != null; p = refreshQueue.pop()) {
                                     if (p) p.setSuccess(true);
                                 }
                             } else {
                                 kc.onAuthRefreshError && kc.onAuthRefreshError();
+
+                                // If there have been any other token updates queued up, fail them all out
                                 for (let p = refreshQueue.pop(); p != null; p = refreshQueue.pop()) {
-                                    if (p) p.setError(true);
+                                    if (p) {
+                                        const tokenUpdateFailure: ITokenUpdateFailure = {
+                                            status: req.status,
+                                            statusText: req.statusText,
+                                            url: url,
+                                            date: (new Date()).toISOString(),
+                                            minValidity: minValidity,
+                                            tokenExpired: tokenExpired,
+                                            expiresIn: expiresIn
+                                        };
+                                        p.setError(tokenUpdateFailure);
+                                    }
                                 }
                             }
                         }
                     };
-
                     req.send(params);
                 }
             }
