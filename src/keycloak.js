@@ -448,11 +448,23 @@
                                             p.setSuccess(true);
                                         }
                                     } else {
-                                        console.warn('[KEYCLOAK] Failed to refresh token');
+                                        // console.warn('[KEYCLOAK] Failed to refresh token');
     
                                         kc.onAuthRefreshError && kc.onAuthRefreshError();
                                         for (var p = refreshQueue.pop(); p != null; p = refreshQueue.pop()) {
-                                            p.setError(true);
+                                            // p.setError(true);
+                                            if (p) {
+                                                var tokenUpdateFailure = {
+                                                    status: req.status,
+                                                    statusText: req.statusText,
+                                                    url: url,
+                                                    date: (new Date()).toISOString(),
+                                                    minValidity: minValidity,
+                                                    tokenExpired: tokenExpired,
+                                                    expiresIn: expiresIn
+                                                };
+                                                p.setError(tokenUpdateFailure);
+                                            }
                                         }
                                     }
                                 }

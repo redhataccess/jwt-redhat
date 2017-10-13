@@ -776,6 +776,7 @@ function getUserInfo(): IJwtUser {
     // the properties to return
     const token = getToken();
     return token ? {
+        user_id: token.user_id,
         id: token.user_id,
         username: token.username,
         account_id: token.account_id,
