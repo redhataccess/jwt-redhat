@@ -22,7 +22,7 @@ export interface ILoginOptions {
 }
 
 export interface IJwtUser {
-    user_id: string;
+    id: string;
     username: string;
     account_id: string;
     account_number: string;
@@ -90,4 +90,21 @@ export interface ITokenResponse {
     refresh_token: string;
     session_state: string;
     token_type: string; // default 'bearer'
+}
+
+export interface IKeycloakCallback {
+    state: string;
+    nonce: string;
+    redirectUri: string;
+    expires: number; // 1505486922969
+}
+
+export interface ITokenUpdateFailure {
+    status: number;
+    statusText: string;
+    url: string;
+    date: string;
+    minValidity: number;
+    tokenExpired: boolean;
+    expiresIn: number;
 }

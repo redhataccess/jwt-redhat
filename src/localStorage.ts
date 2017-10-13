@@ -1,3 +1,7 @@
+import { IKeycloakCallback }    from './models';
+
+const KC_CALLBACK_KEY_PREFIX = 'kc-callback';
+
 export default class LocalStorage {
 
     constructor() {
@@ -9,7 +13,7 @@ export default class LocalStorage {
         const time = new Date().getTime();
         for (let i = 1; i <= localStorage.length; i++)  {
             const key = localStorage.key(i);
-            if (key && key.indexOf('kc-callback-') === 0) {
+            if (key && key.indexOf(KC_CALLBACK_KEY_PREFIX) === 0) {
                 const value = localStorage.getItem(key);
                 if (value) {
                     try {
@@ -25,9 +29,9 @@ export default class LocalStorage {
         }
     }
 
-    get (state) {
+    get (state: string) {
         if (!state) return;
-        const key = 'kc-callback-' + state;
+        const key = `${KC_CALLBACK_KEY_PREFIX}-${state}`;
         let value = localStorage.getItem(key);
         if (value) {
             localStorage.removeItem(key);
@@ -38,9 +42,9 @@ export default class LocalStorage {
         return value;
     }
 
-    add (state) {
+    add (state: IKeycloakCallback) {
         this.clearExpired();
-        const key = 'kc-callback-' + state.state;
+        const key = `${KC_CALLBACK_KEY_PREFIX}-${state.state}`;
         state.expires = new Date().getTime() + (60 * 60 * 1000);
         localStorage.setItem(key, JSON.stringify(state));
     }
