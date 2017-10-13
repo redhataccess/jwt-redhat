@@ -24,6 +24,7 @@ export interface ILoginOptions {
 }
 
 export interface IJwtUser {
+    user_id: string; // keeping for legacy reasons in the CSP
     id: string;
     username: string;
     account_id: string;
