@@ -1,3 +1,5 @@
+import { Keycloak } from '../@types/keycloak';
+
 export interface IKeycloakOptions {
     realm: string;
     clientId: string;
@@ -78,7 +80,7 @@ export interface IToken {
 
 export interface IState {
     initialized: boolean;
-    keycloak: any;
+    keycloak: Keycloak.KeycloakInstance;
 }
 
 export interface ITokenResponse {

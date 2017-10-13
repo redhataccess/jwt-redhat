@@ -1,6 +1,11 @@
-import Keycloak                 from './keycloak';
-import TokenUpdateScheduler, { IUpdateTokenEvent } from './tokenUpdateScheduler';
-const jsUri =                   require('jsuri');
+const Keycloak          = require('./keycloak');
+const jsUri             = require('jsuri');
+import { Keycloak }     from '../@types/keycloak';
+
+import {
+    TokenUpdateScheduler,
+    IUpdateTokenEvent
+} from './tokenUpdateScheduler';
 
 import {
     createPromise,
@@ -235,7 +240,7 @@ const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     url: SSO_URL,
 };
 
-const KEYCLOAK_INIT_OPTIONS: IKeycloakInitOptions = {
+const KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
     responseMode: 'query', // was previously fragment and doesn't work with fragment.
     flow: 'standard',
     token: null,
@@ -300,7 +305,7 @@ if (tokenUpdateScheduler) {
     tokenUpdateScheduler.updateTokenEvent = function (data: IUpdateTokenEvent) {
         if (!tokenUpdateScheduler.isMaster && data) {
             log(`[jwt.js] [Token Update Scheduler] calling keycloak setToken on this slave instance to update with the refreshed master token.`);
-            state.keycloak.setToken(data.token, data.refreshToken, data.idToken, data.timeLocal);
+            state.keycloak.setToken(data.token as any, data.refreshToken, data.idToken, data.timeLocal);
         }
     };
 }
@@ -317,7 +322,7 @@ let stopTokenUpdates: boolean = false;
  */
 function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): void {
     log('[jwt.js] initializing');
-    state.keycloak = new Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
+    state.keycloak = Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
 
     // wire up our handlers to keycloak's events
     state.keycloak.onAuthSuccess = onAuthSuccess;
@@ -518,7 +523,8 @@ function updateToken(force: boolean = false, iteration: number = 0): ISimpleProm
             return state.keycloak
                 .updateToken(force === true ? -1 : REFRESH_TTE)
                 .success(updateTokenSuccess)
-                .error((e: ITokenUpdateFailure) => {
+                // ITokenUpdateFailure
+                .error((e: any) => {
                     if (iteration < RETRY_FAILED_TOKEN_UPDATE_COUNT) {
                         log(`[jwt.js] update token failed, retrying up to ${RETRY_FAILED_TOKEN_UPDATE_COUNT} time(s)`);
                         updateToken(force, iteration + 1);
@@ -540,7 +546,8 @@ function updateToken(force: boolean = false, iteration: number = 0): ISimpleProm
         return state.keycloak
             .updateToken(force === true ? -1 : REFRESH_TTE)
             .success(updateTokenSuccess)
-            .error((e: ITokenUpdateFailure) => {
+            // ITokenUpdateFailure
+            .error((e: any) => {
                 if (iteration < RETRY_FAILED_TOKEN_UPDATE_COUNT) {
                     log(`[jwt.js] update token failed, retrying up to ${RETRY_FAILED_TOKEN_UPDATE_COUNT} time(s)`);
                     updateToken(force, iteration + 1);
@@ -654,7 +661,7 @@ function broadcastUpdatedToken() {
     if (tokenUpdateScheduler) {
         const tokenUpdateData: IUpdateTokenEvent = {
             token: state.keycloak.token,
-            refreshToken: state.keycloak.refreshRoken,
+            refreshToken: state.keycloak.refreshToken,
             idToken: state.keycloak.idToken,
             timeLocal: state.keycloak.timeLocal
         };
@@ -727,7 +734,8 @@ function removeToken() {
  * @return {Object} the parsed JSON Web Token
  */
 function getToken(): IToken {
-    return state.keycloak.tokenParsed;
+    // any here as actual RH tokens have more information than this, which we will customize with IToken above
+    return state.keycloak.tokenParsed as any;
 }
 
 /**
