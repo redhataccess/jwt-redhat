@@ -26,11 +26,14 @@ Jwt.onInit(async function () {
     // print user's authentication status, internal status, and their user info
     if(!Jwt.isAuthenticated()) {
         Jwt.login();
-    } else {
-        const loggedInUser = Jwt.getUserInfo();
-        // Any other application specific code can go here.
     }
 });
+
+// When this event is triggered we know we have a guaranteed non-expired JWT token
+Jwt.onInitialUpdateToken(async function () {
+    const loggedInUser = Jwt.getUserInfo();
+    // Any other application specific code can go here.
+})
 ```
 
 // Javascript 
@@ -54,11 +57,14 @@ Jwt.onInit(() => {
     // if the user isn't authenticated, log them in
     if(!Jwt.isAuthenticated()) {
         Jwt.login();
-    } else {
-        const loggedInUser = Jwt.getUserInfo();
-        // Any other application specific code can go here.
     }
 });
+
+// When this event is triggered we know we have a guaranteed non-expired JWT token
+Jwt.onInitialUpdateToken(async function () {
+    const loggedInUser = Jwt.getUserInfo();
+    // Any other application specific code can go here.
+})
 ```
 
 ### Requesting JWT auth for a new internal webapp

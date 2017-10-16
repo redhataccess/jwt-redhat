@@ -234,6 +234,9 @@ const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this m
 const RETRY_FAILED_TOKEN_UPDATE_COUNT = 1; // number of times to rety the failed token update
 let userInfo: IJwtUser;  // To be used to set the user context in Raven
 
+// This is explicitly to track when the first successfull updateToken happens.
+let timeSkew = null;
+
 const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     realm: 'redhat-external',
     clientId: 'unifiedui',
@@ -263,9 +266,16 @@ const state: IState = {
 
 const events = {
     init: [],
+    token: []
 };
 
 document.cookie = TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
+
+function fakeSuccessPromise(): ISimplePromise {
+    const promise = createPromise();
+    promise.setSuccess();
+    return promise.promise;
+}
 
 /**
  * Log session-related messages to the console, in pre-prod environments.
@@ -275,7 +285,7 @@ function log(message: string) {
         if (lib.store.local.get('session_log') === true) {
             console.log.apply(console, arguments);
         }
-    } catch (e) { }
+    } catch (e) {}
 }
 
 function isLocalStorageAvailable() {
@@ -306,6 +316,7 @@ if (tokenUpdateScheduler) {
         if (!tokenUpdateScheduler.isMaster && data) {
             log(`[jwt.js] [Token Update Scheduler] calling keycloak setToken on this slave instance to update with the refreshed master token.`);
             state.keycloak.setToken(data.token as any, data.refreshToken, data.idToken, data.timeLocal);
+            timeSkew = state.keycloak.timeSkew;
         }
     };
 }
@@ -320,7 +331,7 @@ let stopTokenUpdates: boolean = false;
  * @memberof module:session
  * @private
  */
-function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): void {
+function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Keycloak.KeycloakPromise<boolean, any> {
     log('[jwt.js] initializing');
     state.keycloak = Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
 
@@ -332,7 +343,7 @@ function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: 
     state.keycloak.onAuthLogout = onAuthLogout;
     state.keycloak.onTokenExpired = onTokenExpired;
 
-    state.keycloak
+    return state.keycloak
         .init(keycloakInitOptions ? Object.assign({}, KEYCLOAK_INIT_OPTIONS, keycloakInitOptions) : KEYCLOAK_INIT_OPTIONS)
         .success(keycloakInitSuccess)
         .error(keycloakInitError);
@@ -351,7 +362,6 @@ function keycloakInitSuccess(authenticated) {
         setRefreshToken(state.keycloak.refreshToken);
         startRefreshLoop();
     }
-
     keycloakInitHandler();
 }
 
@@ -365,7 +375,21 @@ function handleInitEvents() {
     while (events.init.length) {
         const event = events.init.shift();
         if (typeof event === 'function') {
-            log('[jwt.js] running an init handler');
+            event(Jwt);
+        }
+    }
+}
+
+/**
+ * Call any token event handlers that have are registered.
+ *
+ * @memberof module:session
+ * @private
+ */
+function handleTokenEvents() {
+    while (events.token.length) {
+        const event = events.token.shift();
+        if (typeof event === 'function') {
             event(Jwt);
         }
     }
@@ -381,11 +405,32 @@ function handleInitEvents() {
 function onInit(func: Function) {
     log('[jwt.js] registering init handler');
     if (state.initialized) {
+        log(`[jwt.js] running event handler: onInit`);
         func(Jwt);
     }
     else {
         events.init.push(func);
     }
+}
+
+/**
+ * Register a function to be called when jwt.js has initialized and
+ * the first token update has successful run
+ * @memberof module:session
+ */
+function onInitialUpdateToken(func: Function) {
+    log(`[jwt.js] registering the onInitialUpdateToken handler`);
+    // We know the setToken has happened at least once when the timeLocal is properly set
+    if (state.initialized && state.keycloak.timeSkew !== null) {
+        log(`[jwt.js] running event handler: onInitialUpdateToken`);
+        func(Jwt);
+    } else {
+        events.token.push(func);
+    }
+}
+
+function isMaster(): boolean {
+    return tokenUpdateScheduler && tokenUpdateScheduler.isMaster;
 }
 
 
@@ -492,7 +537,7 @@ function onTokenExpired() { log('[jwt.js] onTokenExpired'); }
 function isTokenExpired(): boolean {
     if (isLocalStorageAvailable && tokenUpdateScheduler) {
         if (tokenUpdateScheduler.isMaster) {
-            return state.keycloak.isTokenExpired(TOKEN_EXP_TTE) === true;
+            return state.keycloak.isTokenExpired(REFRESH_TTE) === true;
         } else {
             // If the instance is a slave, then the getToken exp will always be out of date
             // most likely resulting in a -1 timeSkew so we should just return false here
@@ -500,7 +545,7 @@ function isTokenExpired(): boolean {
             return false;
         }
     } else {
-        return state.keycloak.isTokenExpired(REFRESH_INTERVAL) === true;
+        return state.keycloak.isTokenExpired(REFRESH_TTE) === true;
     }
 }
 /**
@@ -519,7 +564,7 @@ function updateToken(force: boolean = false, iteration: number = 0): ISimpleProm
     }
     if (isLocalStorageAvailable && tokenUpdateScheduler) {
         if (tokenUpdateScheduler.isMaster) {
-            log('[jwt.js] running updateToken as this tab is master');
+            log(`[jwt.js] running updateToken as this tab is master${force === true ? ', forcing the token update' : ', updating if within ' + REFRESH_TTE + ' seconds'}`);
             return state.keycloak
                 .updateToken(force === true ? -1 : REFRESH_TTE)
                 .success(updateTokenSuccess)
@@ -537,9 +582,7 @@ function updateToken(force: boolean = false, iteration: number = 0): ISimpleProm
             log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
             // TODO -- consider broadcasting a message to the master to update.
             // Also consider the implications of default returning a setSuccess here
-            const promise = createPromise();
-            promise.setSuccess();
-            return promise.promise;
+            return fakeSuccessPromise();
         }
     } else {
         log('[jwt.js] running updateToken (without cross-tab communcation)');
@@ -600,8 +643,8 @@ function cancelRefreshLoop(shouldStopTokenUpdates?: boolean) {
  * @memberof module:session
  * @private
  */
-function refreshLoop() {
-    updateToken();
+function refreshLoop(): ISimplePromise {
+    return updateToken();
 }
 
 /**
@@ -614,6 +657,12 @@ function updateTokenSuccess(refreshed: boolean) {
     log('[jwt.js] updateTokenSuccess, token was ' + ['not ', ''][~~refreshed] + 'refreshed');
     setToken(state.keycloak.token);
     setRefreshToken(state.keycloak.refreshToken);
+
+    if (timeSkew === null && state.keycloak.timeSkew != null) {
+        timeSkew = state.keycloak.timeSkew;
+        handleTokenEvents();
+    }
+
     try {
         if ((refreshed && !userInfo) || (refreshed && userInfo && (userInfo.username !== getUserInfo().username))) {
             setRavenUserContext();
@@ -974,6 +1023,8 @@ const Jwt = {
     startRefreshLoop: initialized(startRefreshLoop),
     isTokenExpired: initialized(isTokenExpired),
     onInit: onInit,
+    onInitialUpdateToken: onInitialUpdateToken,
+    isMaster: isMaster,
     init: init,
     _state: state,
 };
