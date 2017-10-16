@@ -428,6 +428,10 @@ function onInitialUpdateToken(func: Function) {
     }
 }
 
+function isMaster(): boolean {
+    return tokenUpdateScheduler && tokenUpdateScheduler.isMaster;
+}
+
 
 /**
  * Keycloak init error handler.
@@ -1019,6 +1023,7 @@ const Jwt = {
     isTokenExpired: initialized(isTokenExpired),
     onInit: onInit,
     onInitialUpdateToken: onInitialUpdateToken,
+    isMaster: isMaster,
     init: init,
     _state: state,
 };

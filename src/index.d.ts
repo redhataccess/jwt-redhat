@@ -31,6 +31,7 @@ declare namespace Jwt {
     export function isTokenExpired(): boolean;
     export function onInit(func: Function): void;
     export function onInitialUpdateToken(func: Function): void;
+    export function isMaster(): boolean;
     export function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Keycloak.KeycloakPromise<boolean, any>;
     export const _state: IState;
 }
