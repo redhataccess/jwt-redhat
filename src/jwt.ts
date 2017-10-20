@@ -534,10 +534,10 @@ function onTokenExpired() { log('[jwt.js] onTokenExpired'); }
  * @memberof module:session
  * @private
  */
-function isTokenExpired(): boolean {
+function isTokenExpired(tte: number = REFRESH_TTE): boolean {
     if (isLocalStorageAvailable && tokenUpdateScheduler) {
         if (tokenUpdateScheduler.isMaster) {
-            return state.keycloak.isTokenExpired(REFRESH_TTE) === true;
+            return state.keycloak.isTokenExpired(tte) === true;
         } else {
             // If the instance is a slave, then the getToken exp will always be out of date
             // most likely resulting in a -1 timeSkew so we should just return false here
@@ -545,7 +545,7 @@ function isTokenExpired(): boolean {
             return false;
         }
     } else {
-        return state.keycloak.isTokenExpired(REFRESH_TTE) === true;
+        return state.keycloak.isTokenExpired(tte) === true;
     }
 }
 /**
