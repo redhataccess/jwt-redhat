@@ -1,5 +1,4 @@
 const Keycloak          = require('./keycloak');
-const jsUri             = require('jsuri');
 import { Keycloak }     from '../@types/keycloak';
 
 import {
@@ -158,70 +157,15 @@ const lib = {
         cookie_date.setTime(cookie_date.getTime() - 1);
         document.cookie = cookie_name += '=; expires=' + cookie_date.toUTCString();
     },
-    getAuthorizationValue: function () {
-        return (lib.getCookieValue('rh_user') !== '');
-    },
     log: function (message) {
         if (typeof console !== 'undefined') {
             console.log(message);
         }
     },
-    objectEach: function (object, func) {
-        for (let prop in object) {
-            if (object.hasOwnProperty(prop)) {
-                func(prop, object[prop]);
-            }
-        }
-    },
-    arrayEach: function (array, func) {
-        for (let i = 0, len = array.length; i < len; i = i + 1) {
-            func(array[i], i);
-        }
-    },
-    getEventTarget: function (e) {
-        let trg = e.target || e.srcElement || {};
-        if (trg.nodeType === 3) { // defeat Safari bug
-            trg = trg.parentNode;
-        }
-        return trg;
-    },
-    getTextNodes: function (node, includeWhitespaceNodes) {
-        /* thanks http://stackoverflow.com/questions/298750/how-do-i-select-text-nodes-with-jquery#4399718 */
-        const textNodes = [], whitespace = /^\s*$/;
-
-        function getTextNodes(node) {
-            if (node.nodeType === 3) {
-                if (includeWhitespaceNodes || !whitespace.test(node.nodeValue)) {
-                    textNodes.push(node.data);
-                }
-            } else {
-                for (let i = 0, len = node.childNodes.length; i < len; i += 1) {
-                    getTextNodes(node.childNodes[i]);
-                }
-            }
-        }
-
-        if (typeof node !== 'undefined') {
-            getTextNodes(node);
-        }
-        return textNodes;
-    },
     store: {
         local: private_functions.make_store('local'),
         session: private_functions.make_store('session')
-    },
-    /**
-     * Get hash (aka anchor) string parameters as though they were querystring params.
-     */
-    getHashParam: function (name) {
-        // create a jsuri object from the current url
-        const url = new jsUri(location.href);
-        // jsuri has no hashstring parsing functions, but if we set the
-        // hashstring to the querystring, we can use the querystring
-        // parsing functions :]
-        return url.setQuery(url.anchor()).getQueryParamValue(name);
     }
-
 };
 
 const SSO_URL = ssoUrl();
