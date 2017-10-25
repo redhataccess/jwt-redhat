@@ -2,6 +2,12 @@ const Keycloak          = require('./keycloak');
 import { Keycloak }     from '../@types/keycloak';
 
 import {
+    CacheUtils,
+    IStringCache,
+    IBooleanCache
+} from './cacheUtils';
+
+import {
     TokenUpdateScheduler,
     IUpdateTokenEvent
 } from './tokenUpdateScheduler';
@@ -51,63 +57,6 @@ declare const Raven: {
 
 /*global JSON, define, console, document, window, chrometwo_require*/
 /*jslint browser: true*/
-
-const private_functions = {
-    /**
-     * Store things in local- or sessionStorage.  Because *Storage only
-     * accepts string values, the store will automatically serialize
-     * objects into JSON strings when you store them (set), and deserialize
-     * them back into objects when you retrieve them (get).
-     *
-     * @param {string} type Either "local" or "session", depending on
-     * whether you want localStorage or sessionStorage.
-     * @return {object} An object-friendly interface to localStorage or
-     * sessionStorage.
-     */
-    make_store: function (type) {
-        let store;
-        try {
-            // if DOM Storage is disabled in Chrome, merely referencing
-            // window.localStorage or window.sessionStorage will throw a
-            // DOMException.
-            store = window[type + 'Storage'];
-
-            // if DOM Storage is disabled in other browsers, it may not
-            // throw an error, but we should still throw one for them.
-            if (!store) throw new Error('DOM Storage is disabled');
-        } catch (e) {
-            // this means DOM storage is disabled in the users' browser, so
-            // we'll create an in-memory object that simulates the DOM
-            // Storage API.
-            store = {
-                getItem: function mem_store_get_item(key) {
-                    return store[key];
-                },
-                setItem: function mem_store_set_item(key, value) {
-                    return (store[key] = value);
-                },
-                removeItem: function mem_store_remove_item(key) {
-                    return delete store[key];
-                }
-            };
-        }
-        // The get and set here are used exclusively for getting and setting the token and refreshToken which are strings.
-        return {
-            get: function get(key) {
-                const value = store.getItem(key);
-                return value && JSON.parse(value);
-            },
-            set: function set(key, val) {
-                if (typeof val !== 'undefined') {
-                    return store.setItem(key, JSON.stringify(val));
-                }
-            },
-            remove: function remove(key) {
-                return store.removeItem(key);
-            }
-        };
-    }
-};
 
 const lib = {
 
@@ -161,13 +110,8 @@ const lib = {
         if (typeof console !== 'undefined') {
             console.log(message);
         }
-    },
-    store: {
-        local: private_functions.make_store('local'),
-        session: private_functions.make_store('session')
     }
 };
-
 const SSO_URL = ssoUrl();
 const INTERNAL_ROLE = 'redhat:employees';
 const TOKEN_NAME = 'rh_jwt';
@@ -197,11 +141,13 @@ const KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
 const origin = location.hostname;
 // const originWithPort = location.hostname + (location.port ? ':' + location.port : '');
 
-const token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
-const refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
+// const token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
+// const refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
+// let token = null;
+// let refreshToken = null;
 
-if (token && token !== 'undefined') { KEYCLOAK_INIT_OPTIONS.token = token; }
-if (refreshToken) { KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
+// if (token && token !== 'undefined') { KEYCLOAK_INIT_OPTIONS.token = token; }
+// if (refreshToken) { KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
 
 const state: IState = {
     initialized: false,
@@ -225,10 +171,13 @@ function fakeSuccessPromise(): ISimplePromise {
  * Log session-related messages to the console, in pre-prod environments.
  */
 function log(message: string) {
+    const args = arguments;
     try {
-        if (lib.store.local.get('session_log') === true) {
-            console.log.apply(console, arguments);
-        }
+        CacheUtils.get<IBooleanCache>('debug-logging').then((debugLoggingCache) => {
+            if (debugLoggingCache && debugLoggingCache.value === true) {
+                console.log.apply(console, args);
+            }
+        });
     } catch (e) {}
 }
 
@@ -272,30 +221,41 @@ let stopTokenUpdates: boolean = false;
 /**
  * Kicks off all the session-related things.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
-function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Keycloak.KeycloakPromise<boolean, any> {
+function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Promise<void | Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError>> {
     log('[jwt.js] initializing');
-    state.keycloak = Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
 
-    // wire up our handlers to keycloak's events
-    state.keycloak.onAuthSuccess = onAuthSuccess;
-    state.keycloak.onAuthError = onAuthError;
-    state.keycloak.onAuthRefreshSuccess = onAuthRefreshSuccess;
-    state.keycloak.onAuthRefreshError = onAuthRefreshError;
-    state.keycloak.onAuthLogout = onAuthLogout;
-    state.keycloak.onTokenExpired = onTokenExpired;
+    // TODO -- then this, also look in keycloak.js to see if any sort of exp field is set, I think so?
+    return Promise.all([CacheUtils.get<IStringCache>(TOKEN_NAME), CacheUtils.get<IStringCache>(REFRESH_TOKEN_NAME)]).then((results) => {
 
-    return state.keycloak
-        .init(keycloakInitOptions ? Object.assign({}, KEYCLOAK_INIT_OPTIONS, keycloakInitOptions) : KEYCLOAK_INIT_OPTIONS)
-        .success(keycloakInitSuccess)
-        .error(keycloakInitError);
+        if (results && results[0] && results[0].value !== 'undefined') { KEYCLOAK_INIT_OPTIONS.token = results[0].value; }
+        if (results && results[1] && results[1].value !== 'undefined') { KEYCLOAK_INIT_OPTIONS.refreshToken = results[1].value; }
+
+        state.keycloak = Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
+
+        // wire up our handlers to keycloak's events
+        state.keycloak.onAuthSuccess = onAuthSuccess;
+        state.keycloak.onAuthError = onAuthError;
+        state.keycloak.onAuthRefreshSuccess = onAuthRefreshSuccess;
+        state.keycloak.onAuthRefreshError = onAuthRefreshError;
+        state.keycloak.onAuthLogout = onAuthLogout;
+        state.keycloak.onTokenExpired = onTokenExpired;
+
+        return state.keycloak
+            .init(keycloakInitOptions ? Object.assign({}, KEYCLOAK_INIT_OPTIONS, keycloakInitOptions) : KEYCLOAK_INIT_OPTIONS)
+            .success(keycloakInitSuccess)
+            .error(keycloakInitError);
+
+    }).catch((e) => {
+        log(`Error fetching cached token`);
+    });
 }
 
 /**
  * Keycloak init success handler.
- * @memberof module:session
+ * @memberof module:jwt
  * @param {Boolean} authenticated whether the user is authenticated or not
  * @private
  */
@@ -312,7 +272,7 @@ function keycloakInitSuccess(authenticated) {
 /**
  * Call any init event handlers that have are registered.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function handleInitEvents() {
@@ -327,7 +287,7 @@ function handleInitEvents() {
 /**
  * Call any token event handlers that have are registered.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function handleTokenEvents() {
@@ -344,7 +304,7 @@ function handleTokenEvents() {
  * immediately if already initialized.  When called, the function will be
  * passed a reference to the jwt.js API.
  *
- * @memberof module:session
+ * @memberof module:jwt
  */
 function onInit(func: Function) {
     log('[jwt.js] registering init handler');
@@ -360,7 +320,7 @@ function onInit(func: Function) {
 /**
  * Register a function to be called when jwt.js has initialized and
  * the first token update has successful run
- * @memberof module:session
+ * @memberof module:jwt
  */
 function onInitialUpdateToken(func: Function) {
     log(`[jwt.js] registering the onInitialUpdateToken handler`);
@@ -373,14 +333,38 @@ function onInitialUpdateToken(func: Function) {
     }
 }
 
+/**
+ * Enable debug logging
+ * @memberof module:jwt
+ */
+async function enableDebugLogging() {
+    const booleanCache = await CacheUtils.get<IBooleanCache>('debug-logging');
+    if (booleanCache && booleanCache.value === true) {
+        log(`[jwt.js] Debug logging already enabled`);
+    } else {
+        const newBooleanCache: IBooleanCache = { value: true };
+        await CacheUtils.set('debug-logging', newBooleanCache);
+        log(`[jwt.js] Enabled debug logging`);
+    }
+}
+
+/**
+ * Disable debug logging
+ * @memberof module:jwt
+ */
+function disableDebugLogging() {
+    log(`[jwt.js] Disabling debug logging`);
+    const newBooleanCache: IBooleanCache = { value: false };
+    CacheUtils.set('debug-logging', newBooleanCache);
+}
+
 function isMaster(): boolean {
     return tokenUpdateScheduler && tokenUpdateScheduler.isMaster;
 }
 
-
 /**
  * Keycloak init error handler.
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function keycloakInitError() {
@@ -394,7 +378,7 @@ function keycloakInitError() {
  * Does some things after keycloak initializes, whether or not
  * initialization was successful.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function keycloakInitHandler() {
@@ -405,7 +389,7 @@ function keycloakInitHandler() {
 /**
  * Creates a URL to the SSO service based on an old IDP URL.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @returns {String} a URL to the SSO service
  * @private
  */
@@ -452,7 +436,7 @@ function ssoUrl() {
 /**
  * A handler for when authentication is successfully established.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function onAuthSuccess() {
@@ -475,7 +459,7 @@ function onTokenExpired() { log('[jwt.js] onTokenExpired'); }
 /**
  * Checks if the token is expired
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function isTokenExpired(tte: number = REFRESH_TTE): boolean {
@@ -496,7 +480,7 @@ function isTokenExpired(tte: number = REFRESH_TTE): boolean {
  * Refreshes the access token.  Recursively can be called with an iteration count
  * where the function will retry x number of times.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function updateToken(force: boolean = false, iteration: number = 0): ISimplePromise {
@@ -548,11 +532,11 @@ function updateToken(force: boolean = false, iteration: number = 0): ISimpleProm
 }
 
 /**
- * Start the {@link module:session.refreshLoop refreshLoop}, which
+ * Start the {@link module:jwt.refreshLoop refreshLoop}, which
  * periodically updates the authentication token.  This should only ever
  * be called manually if manually first cancelling the refresh loop
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function startRefreshLoop() {
@@ -566,8 +550,8 @@ function startRefreshLoop() {
 }
 
 /**
- * Cancel the {@link module:session.refreshLoop refreshLoop}
- * @memberof module:session
+ * Cancel the {@link module:jwt.refreshLoop refreshLoop}
+ * @memberof module:jwt
  * @private
  */
 function cancelRefreshLoop(shouldStopTokenUpdates?: boolean) {
@@ -581,10 +565,10 @@ function cancelRefreshLoop(shouldStopTokenUpdates?: boolean) {
 }
 
 /**
- * This is run periodically by {@link module:session.startRefreshLoop
+ * This is run periodically by {@link module:jwt.startRefreshLoop
  * startRefreshLoop}.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function refreshLoop(): ISimplePromise {
@@ -594,7 +578,7 @@ function refreshLoop(): ISimplePromise {
 /**
  * Handler run when a token is successfully updated.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function updateTokenSuccess(refreshed: boolean) {
@@ -619,7 +603,7 @@ function updateTokenSuccess(refreshed: boolean) {
 /**
  * Handler run when a token update fails.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function updateTokenFailure(e: ITokenUpdateFailure) {
@@ -630,24 +614,27 @@ function updateTokenFailure(e: ITokenUpdateFailure) {
 /**
  * Save the refresh token value in a semi-persistent place (sessionStorage).
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
-function setRefreshToken(refresh_token) {
+function setRefreshToken(refresh_token: string) {
     log('[jwt.js] setting refresh token');
-    lib.store.local.set(REFRESH_TOKEN_NAME, refresh_token);
+    const newRefreshTokenCache: IStringCache = {
+        value: refresh_token
+    };
+    CacheUtils.set<IStringCache, string>(REFRESH_TOKEN_NAME, newRefreshTokenCache);
     broadcastUpdatedToken();
 }
 
 /**
  * Remove the token value from its a semi-persistent place.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function removeRefreshToken() {
     log('[jwt.js] removing refresh token');
-    lib.store.local.remove(REFRESH_TOKEN_NAME);
+    CacheUtils.delete(REFRESH_TOKEN_NAME);
 }
 
 function broadcastUpdatedToken() {
@@ -665,7 +652,7 @@ function broadcastUpdatedToken() {
 /**
  * Save the token value in a semi-persistent place (cookie).
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function setToken(token) {
@@ -676,7 +663,10 @@ function setToken(token) {
         // localStorage value exists so the token can be refreshed even if
         // it's been expired for a long time.
         log('[jwt.js] setting access token');
-        lib.store.local.set(TOKEN_NAME, token);
+        const newTokenCache: IStringCache = {
+            value: token
+        };
+        CacheUtils.set<IStringCache, string>(TOKEN_NAME, newTokenCache);
         document.cookie = TOKEN_NAME + '=' + token + ';path=/;max-age=' + 5 * 60 + ';domain=.' + origin + ';secure;';
         broadcastUpdatedToken();
     }
@@ -685,12 +675,12 @@ function setToken(token) {
 /**
  * Remove the token value from its a semi-persistent place.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function removeToken() {
     log('[jwt.js] removing access token');
-    lib.store.local.remove(TOKEN_NAME);
+    CacheUtils.delete(TOKEN_NAME);
     document.cookie = TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
 }
 
@@ -723,7 +713,7 @@ function removeToken() {
 /**
  * Get an object containing the parsed JSON Web Token.  Contains user and session metadata.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @return {Object} the parsed JSON Web Token
  */
 function getToken(): IToken {
@@ -742,16 +732,22 @@ function getToken(): IToken {
  * Note that the token is technically kept in sync across tabs, but this is the safest function to access
  * the latest token with
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @return {Object} the parsed JSON Web Token
  */
-function getStoredTokenValue(): string {
-    return lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
+function getStoredTokenValue(): Promise<string> {
+    return CacheUtils.get<IStringCache>(TOKEN_NAME).then((cachedToken) => {
+        if (cachedToken) {
+            return cachedToken.value;
+        } else {
+            return lib.getCookieValue(TOKEN_NAME);
+        }
+    });
 }
 
 /* Get a string containing the unparsed, base64-encoded JSON Web Token.
 *
-* @memberof module:session
+* @memberof module:jwt
 * @return {Object} the parsed JSON Web Token
 */
 function getEncodedToken(): string {
@@ -762,7 +758,7 @@ function getEncodedToken(): string {
  * Get the user info from the JSON Web Token.  Contains user information
  * similar to what the old userStatus REST service returned.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @return {Object} the user information
  */
 function getUserInfo(): IJwtUser {
@@ -787,7 +783,7 @@ function getUserInfo(): IJwtUser {
 /**
  * Is the user authenticated?
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @returns {Boolean} true if the user is authenticated, false otherwise
  */
 function isAuthenticated(): boolean {
@@ -797,7 +793,7 @@ function isAuthenticated(): boolean {
 /**
  * Is the user is a Red Hat employee?
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @returns {Boolean} true if the user is a Red Hat employee, otherwise false
  */
 function isInternal(): boolean {
@@ -813,7 +809,7 @@ function isInternal(): boolean {
  * @returns {Boolean} whether the user is a member of ALL given roles
  * @example session.hasRole('portal_manage_cases');
  * session.hasRole('role1', 'role2', 'role3');
- * @memberof module:session
+ * @memberof module:jwt
  */
 function hasRole(...roles: string[]): boolean {
     if (!roles) return false;
@@ -828,7 +824,7 @@ function hasRole(...roles: string[]): boolean {
 /**
  * Get the URL to the registration page.
  * @return {String} the URL to the registration page
- * @memberof module:session
+ * @memberof module:jwt
  */
 function getRegisterUrl() {
     return state.keycloak.createRegisterUrl();
@@ -837,7 +833,7 @@ function getRegisterUrl() {
 /**
  * Get the URL to the login page.
  * @return {String} the URL to the login page
- * @memberof module:session
+ * @memberof module:jwt
  */
 function getLoginUrl(options: ILoginOptions = {}): string {
     const redirectUri = options.redirectUri || location.href;
@@ -848,7 +844,7 @@ function getLoginUrl(options: ILoginOptions = {}): string {
 /**
  * Get the URL to the logout page.
  * @return {String} the URL to the logout page
- * @memberof module:session
+ * @memberof module:jwt
  */
 function getLogoutUrl(): string {
     return state.keycloak.createLogoutUrl();
@@ -857,7 +853,7 @@ function getLogoutUrl(): string {
 /**
  * Get the URL to the account management page.
  * @return {String} the URL to the account management page
- * @memberof module:session
+ * @memberof module:jwt
  */
 function getAccountUrl(): string {
     return state.keycloak.createAccountUrl();
@@ -867,7 +863,7 @@ function getAccountUrl(): string {
  * "Decorator" enforcing that jwt.js be initialized before the wrapped
  * function will be run.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  * @param {Function} func a function which shouldn't be run before jwt.js is
  * initialized.
@@ -891,7 +887,7 @@ function initialized(func) {
  * user will be sent to the Keycloak server but bounced back to the current
  * page right away.
  *
- * @memberof module:session
+ * @memberof module:jwt
  * @param {Object} options See [options](https://keycloak.gitbooks.io/securing-client-applications-guide/content/v/2.2/topics/oidc/javascript-adapter.html#_login_options) for valid options.
  */
 function login(options: ILoginOptions = {}): void {
@@ -902,7 +898,7 @@ function login(options: ILoginOptions = {}): void {
 
 /**
  * Navigate to the logout page, end session, then navigate back.
- * @memberof module:session
+ * @memberof module:jwt
  */
 function logout(options: ILoginOptions = {}): void {
     removeToken();
@@ -912,7 +908,7 @@ function logout(options: ILoginOptions = {}): void {
 
 /**
  * Navigate to the account registration page.
- * @memberof module:session
+ * @memberof module:jwt
  */
 function register(options): void {
     state.keycloak.register(options);
@@ -920,7 +916,7 @@ function register(options): void {
 
 /**
  * Send current user context to Raven (JS error logging library).
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function setRavenUserContext() {
@@ -935,7 +931,7 @@ function setRavenUserContext() {
 
 /**
  * Send current user context to Raven (JS error logging library).
- * @memberof module:session
+ * @memberof module:jwt
  * @private
  */
 function sendToSentry(error: Error, extra: Object) {
@@ -968,6 +964,8 @@ const Jwt = {
     isTokenExpired: initialized(isTokenExpired),
     onInit: onInit,
     onInitialUpdateToken: onInitialUpdateToken,
+    enableDebugLogging: enableDebugLogging,
+    disableDebugLogging: disableDebugLogging,
     isMaster: isMaster,
     init: init,
     _state: state,

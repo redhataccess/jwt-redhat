@@ -1,4 +1,12 @@
-const localStorageFieldName = 'token-update-scheduler';
+const SCHEDULER_CACHE_NAME = 'token-update-scheduler';
+
+const SchedulerTypes = {
+    STORAGE: 'storage' as SchedulerType,
+    UNLOAD: 'unload' as SchedulerType,
+    BROADCAST: 'broadcast' as SchedulerType
+};
+
+type SchedulerType = 'storage' | 'unload' | 'broadcast';
 
 export interface IUpdateTokenEvent {
     token: string;
@@ -7,31 +15,30 @@ export interface IUpdateTokenEvent {
     timeLocal: number;
 }
 
-// https://blog.fastmail.com/2012/11/26/inter-tab-communication-using-local-storage/
 export function TokenUpdateScheduler () {
     const now = Date.now();
     let ping = 0;
     try {
-        ping = +localStorage.getItem(localStorageFieldName) || 0;
+        ping = +localStorage.getItem(SCHEDULER_CACHE_NAME) || 0;
     } catch ( error ) {}
     if ( now - ping > 45000 ) {
         this.becomeMaster();
     } else {
         this.loseMaster();
     }
-    window.addEventListener('storage', this, false );
-    window.addEventListener('unload', this, false );
+    window.addEventListener(SchedulerTypes.STORAGE, this, false );
+    window.addEventListener(SchedulerTypes.UNLOAD, this, false );
 }
 
 TokenUpdateScheduler.prototype.isMaster = false;
 TokenUpdateScheduler.prototype.destroy = function () {
     if ( this.isMaster ) {
         try {
-            localStorage.setItem(localStorageFieldName, '0');
+            localStorage.setItem(SCHEDULER_CACHE_NAME, '0');
         } catch ( error ) {}
     }
-    window.removeEventListener('storage', this, false );
-    window.removeEventListener('unload', this, false );
+    window.removeEventListener(SchedulerTypes.STORAGE, this, false );
+    window.removeEventListener(SchedulerTypes.UNLOAD, this, false );
 };
 
 TokenUpdateScheduler.prototype.handleEvent = function ( event ) {
@@ -41,9 +48,9 @@ TokenUpdateScheduler.prototype.handleEvent = function ( event ) {
         const type = event.key;
         let ping = 0;
         let data;
-        if ( type === localStorageFieldName) {
+        if ( type === SCHEDULER_CACHE_NAME) {
             try {
-                ping = +localStorage.getItem(localStorageFieldName) || 0;
+                ping = +localStorage.getItem(SCHEDULER_CACHE_NAME) || 0;
             } catch ( error ) {}
             if ( ping ) {
                 this.loseMaster();
@@ -57,10 +64,10 @@ TokenUpdateScheduler.prototype.handleEvent = function ( event ) {
                     ~~( Math.random() * 1000 )
                 );
             }
-        } else if ( type === 'broadcast' ) {
+        } else if ( type === SchedulerTypes.BROADCAST ) {
             try {
                 data = JSON.parse(
-                    localStorage.getItem( 'broadcast' )
+                    localStorage.getItem(SchedulerTypes.BROADCAST)
                 );
                 this[ data.type ]( data.event );
             } catch ( error ) {}
@@ -70,7 +77,7 @@ TokenUpdateScheduler.prototype.handleEvent = function ( event ) {
 
 TokenUpdateScheduler.prototype.becomeMaster = function () {
     try {
-        localStorage.setItem(localStorageFieldName, `${Date.now()}`);
+        localStorage.setItem(SCHEDULER_CACHE_NAME, `${Date.now()}`);
     } catch ( error ) {}
 
     clearTimeout( this._ping );
@@ -100,7 +107,7 @@ TokenUpdateScheduler.prototype.masterDidChange = function () {};
 
 TokenUpdateScheduler.prototype.broadcast = function ( type, event ) {
     try {
-        localStorage.setItem('broadcast',
+        localStorage.setItem(SchedulerTypes.BROADCAST,
             JSON.stringify({
                 type: type,
                 event: event
