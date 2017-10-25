@@ -22,7 +22,7 @@ declare namespace Jwt {
     export function getLogoutUrl(): string;
     export function getAccountUrl(): string;
     export function getToken(): IToken;
-    export function getStoredTokenValue(): string;
+    export function getStoredTokenValue(): Promise<string>;
     export function getEncodedToken(): string;
     export function getUserInfo(): IJwtUser;
     export function updateToken(force?: boolean): ISimplePromise;
@@ -32,7 +32,9 @@ declare namespace Jwt {
     export function onInit(func: Function): void;
     export function onInitialUpdateToken(func: Function): void;
     export function isMaster(): boolean;
-    export function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Keycloak.KeycloakPromise<boolean, any>;
+    export function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Promise<void | Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError>>;
+    export function enableDebugLogging();
+    export function disableDebugLogging();
     export const _state: IState;
 }
 
