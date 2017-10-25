@@ -66,9 +66,9 @@
   dependencies:
     "@types/source-map" "*"
 
-"@types/webpack@^3.0.13":
-  version "3.0.13"
-  resolved "https://registry.yarnpkg.com/@types/webpack/-/webpack-3.0.13.tgz#5a49ae51e784e73bc46830a6a20656e85b8af0e6"
+"@types/webpack@^3.0.14":
+  version "3.0.14"
+  resolved "https://registry.yarnpkg.com/@types/webpack/-/webpack-3.0.14.tgz#acd254d4b68f84ef36eff2f55aacc656c0734166"
   dependencies:
     "@types/node" "*"
     "@types/tapable" "*"
