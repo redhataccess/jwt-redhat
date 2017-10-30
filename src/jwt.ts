@@ -507,10 +507,29 @@ function updateToken(force: boolean = false, iteration: number = 0): ISimpleProm
                     }
                 });
         } else {
-            log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
-            // TODO -- consider broadcasting a message to the master to update.
-            // Also consider the implications of default returning a setSuccess here
-            return fakeSuccessPromise();
+            // This is a slave.  There are two conditions here.
+            // 1. everything is operating fine and we should skip the forced update and let the master handle it
+            // 2. The master token update failed, and we have a stale token.  For this condition, at least we can
+            // check to see if the token is currently failed, if so, force it to update.
+
+            // If the token will expire within 10 seconds then we know there hasn't been any token updates from the
+            // master recently.  This would most likely indicate an issue with token updates from the backend servers
+            if (state.keycloak.isTokenExpired(10) === true) {
+                log('[jwt.js] slave forcing the updateToken call.  This would indicate an issue in the master tab with updating the token.');
+                return state.keycloak
+                    .updateToken(-1)
+                    .success(updateTokenSuccess)
+                    .error((e: any) => {
+                        log(`[jwt.js] slave force update token failed.`);
+                        updateTokenFailure(e);
+                    });
+            } else {
+                log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
+                // TODO -- consider broadcasting a message to the master to update.
+                // Also consider the implications of default returning a setSuccess here
+                return fakeSuccessPromise();
+            }
+
         }
     } else {
         log('[jwt.js] running updateToken (without cross-tab communcation)');
