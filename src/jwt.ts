@@ -9,7 +9,7 @@ import {
 } from './cacheUtils';
 
 import {
-    TokenUpdateScheduler,
+    // TokenUpdateScheduler,
     IUpdateTokenEvent
 } from './tokenUpdateScheduler';
 
@@ -201,7 +201,13 @@ function isLocalStorageAvailable() {
     }
 }
 
-const tokenUpdateScheduler = isLocalStorageAvailable() ? new TokenUpdateScheduler() : null;
+// Disabling master/slave token updates until further testing.  One major issue is that
+// slave tabs are unaware if the master tab fails to update the token leading to the slave tabs
+// sending requests with expired tokens even since the isTokenExpired always returns false on
+// slave tabs since the master is in control.
+// when it is technically true.
+// const tokenUpdateScheduler = isLocalStorageAvailable() ? new TokenUpdateScheduler() : null;
+const tokenUpdateScheduler = null;
 if (tokenUpdateScheduler) {
     tokenUpdateScheduler.logMessage = function (data) {
         log(`[jwt.js] [Token Update Scheduler] ${data.text}`);
@@ -405,7 +411,11 @@ function disableDebugLogging() {
 }
 
 function isMaster(): boolean {
-    return tokenUpdateScheduler && tokenUpdateScheduler.isMaster;
+    if (tokenUpdateScheduler) {
+        return tokenUpdateScheduler.isMaster;
+    } else {
+        return true;
+    }
 }
 
 /**
@@ -584,12 +594,6 @@ function isTokenExpired(tte: number = REFRESH_TTE): boolean {
  */
 async function updateToken(force: boolean = false): Promise<ISimplePromise> {
     try {
-        if (stopTokenUpdates === true) {
-            log('[jwt.js] Not updating the token as stopTokenUpdates is set to true.');
-            const promise = createPromise();
-            promise.setError();
-            return promise.promise;
-        }
         const isFailCountPassed = await failCountPassed();
         if (isFailCountPassed) {
             log('[jwt.js] not updating token because updating failed more than ' + FAIL_COUNT_THRESHOLD + ' times in a row');
