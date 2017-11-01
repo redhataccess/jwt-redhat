@@ -4,7 +4,8 @@ import { Keycloak }     from '../@types/keycloak';
 import {
     CacheUtils,
     IStringCache,
-    IBooleanCache
+    IBooleanCache,
+    INumberCache
 } from './cacheUtils';
 
 import {
@@ -16,7 +17,6 @@ import {
     createPromise,
     ISimplePromise
 } from './simulatedPromise';
-
 import {
     IKeycloakOptions,
     IState,
@@ -119,7 +119,8 @@ const REFRESH_TOKEN_NAME = 'rh_refresh_token';
 const TOKEN_EXP_TTE = 58; // Seconds to check forward if the token will expire
 const REFRESH_INTERVAL = 1 * TOKEN_EXP_TTE * 1000; // ms. check token for upcoming expiration every this many milliseconds
 const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this many seconds from now
-const RETRY_FAILED_TOKEN_UPDATE_COUNT = 1; // number of times to rety the failed token update
+const FAIL_COUNT_NAME = 'refresh_fail_count';
+const FAIL_COUNT_THRESHOLD = 5; // how many times in a row token refresh can fail before we give up trying
 let userInfo: IJwtUser;  // To be used to set the user context in Raven
 
 // This is explicitly to track when the first successfull updateToken happens.
@@ -156,7 +157,9 @@ const state: IState = {
 
 const events = {
     init: [],
-    token: []
+    token: [],
+    refreshError: [],
+    tokenExpired: []
 };
 
 document.cookie = TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
@@ -166,6 +169,12 @@ function fakeSuccessPromise(): ISimplePromise {
     promise.setSuccess();
     return promise.promise;
 }
+
+// function fakeErrorPromise(e: any): ISimplePromise {
+//     const promise = createPromise();
+//     promise.setError(e);
+//     return promise.promise;
+// }
 
 /**
  * Log session-related messages to the console, in pre-prod environments.
@@ -239,9 +248,9 @@ function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: 
         state.keycloak.onAuthSuccess = onAuthSuccess;
         state.keycloak.onAuthError = onAuthError;
         state.keycloak.onAuthRefreshSuccess = onAuthRefreshSuccess;
-        state.keycloak.onAuthRefreshError = onAuthRefreshError;
+        state.keycloak.onAuthRefreshError = onAuthRefreshErrorCallback;
         state.keycloak.onAuthLogout = onAuthLogout;
-        state.keycloak.onTokenExpired = onTokenExpired;
+        state.keycloak.onTokenExpired = onTokenExpiredCallback;
 
         return state.keycloak
             .init(keycloakInitOptions ? Object.assign({}, KEYCLOAK_INIT_OPTIONS, keycloakInitOptions) : KEYCLOAK_INIT_OPTIONS)
@@ -264,13 +273,18 @@ function keycloakInitSuccess(authenticated) {
     if (authenticated) {
         setToken(state.keycloak.token);
         setRefreshToken(state.keycloak.refreshToken);
-        startRefreshLoop();
+        resetFailCount().then(() => {
+            startRefreshLoop();
+        }).catch(() => {
+            log('[jwt.js] unable to reset the fail count');
+            startRefreshLoop();
+        });
     }
     keycloakInitHandler();
 }
 
 /**
- * Call any init event handlers that have are registered.
+ * Call any init event handlers that have are registered.  One time call then removed.
  *
  * @memberof module:jwt
  * @private
@@ -285,7 +299,39 @@ function handleInitEvents() {
 }
 
 /**
- * Call any token event handlers that have are registered.
+ * Call refresh error events
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function handleRefreshErrorEvents() {
+    if (events.refreshError.length > 0) {
+        events.refreshError.forEach((event) => {
+            if (typeof event === 'function') {
+                event(Jwt);
+            }
+        });
+    }
+}
+
+/**
+ * Call Token expired events
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function handleTokenExpiredEvents() {
+    if (events.tokenExpired.length > 0) {
+        events.tokenExpired.forEach((event) => {
+            if (typeof event === 'function') {
+                event(Jwt);
+            }
+        });
+    }
+}
+
+/**
+ * Call any token event handlers that have are registered.  One time call then removed.
  *
  * @memberof module:jwt
  * @private
@@ -387,6 +433,26 @@ function keycloakInitHandler() {
 }
 
 /**
+ * Call events after keycloak auth refresh error.
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function keycloakRefreshErrorHandler() {
+    handleRefreshErrorEvents();
+}
+
+/**
+ * Call events after keycloak token expired
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function keycloakTokenExpiredHandler() {
+    handleTokenExpiredEvents();
+}
+
+/**
  * Creates a URL to the SSO service based on an old IDP URL.
  *
  * @memberof module:jwt
@@ -452,9 +518,42 @@ function onAuthError() {
 function onAuthRefreshSuccess() {
     log('[jwt.js] onAuthRefreshSuccess');
 }
-function onAuthRefreshError() { log('[jwt.js] onAuthRefreshError'); }
+
+function onAuthRefreshErrorCallback() {
+    log('[jwt.js] onAuthRefreshError');
+    keycloakRefreshErrorHandler();
+}
+
+/**
+ * Register a function to be called when keycloak has failed to refresh the session.  Runs
+ * immediately if already initialized.  When called, the function will be
+ * passed a reference to the jwt.js API.
+ *
+ * @memberof module:jwt
+ */
+function onAuthRefreshError(func: Function) {
+    log('[jwt.js] registering auth refresh error handler');
+    events.refreshError.push(func);
+}
+
 function onAuthLogout() { log('[jwt.js] onAuthLogout'); }
-function onTokenExpired() { log('[jwt.js] onTokenExpired'); }
+
+function onTokenExpiredCallback() {
+    log('[jwt.js] onTokenExpired');
+    keycloakTokenExpiredHandler();
+}
+
+/**
+ * Register a function to be called when keycloak as expired the token.  Runs
+ * immediately if already initialized.  When called, the function will be
+ * passed a reference to the jwt.js API.
+ *
+ * @memberof module:jwt
+ */
+function onTokenExpired(func: Function) {
+    log('[jwt.js] registering token expired handler');
+    events.tokenExpired.push(func);
+}
 
 /**
  * Checks if the token is expired
@@ -483,71 +582,44 @@ function isTokenExpired(tte: number = REFRESH_TTE): boolean {
  * @memberof module:jwt
  * @private
  */
-function updateToken(force: boolean = false, iteration: number = 0): ISimplePromise {
-    if (stopTokenUpdates === true) {
-        log('[jwt.js] Not updating the token as stopTokenUpdates is set to true.');
-        const promise = createPromise();
-        promise.setError();
-        return promise.promise;
-    }
-    if (isLocalStorageAvailable && tokenUpdateScheduler) {
-        if (tokenUpdateScheduler.isMaster) {
-            log(`[jwt.js] running updateToken as this tab is master${force === true ? ', forcing the token update' : ', updating if within ' + REFRESH_TTE + ' seconds'}`);
-            return state.keycloak
-                .updateToken(force === true ? -1 : REFRESH_TTE)
-                .success(updateTokenSuccess)
-                // ITokenUpdateFailure
-                .error((e: any) => {
-                    if (iteration < RETRY_FAILED_TOKEN_UPDATE_COUNT) {
-                        log(`[jwt.js] update token failed, retrying up to ${RETRY_FAILED_TOKEN_UPDATE_COUNT} time(s)`);
-                        updateToken(force, iteration + 1);
-                    } else {
-                        log(`[jwt.js] update token failed, already retried ${RETRY_FAILED_TOKEN_UPDATE_COUNT} time(s)`);
-                        updateTokenFailure(e);
-                    }
-                });
-        } else {
-            // This is a slave.  There are two conditions here.
-            // 1. everything is operating fine and we should skip the forced update and let the master handle it
-            // 2. The master token update failed, and we have a stale token.  For this condition, at least we can
-            // check to see if the token is currently failed, if so, force it to update.
-
-            // If the token will expire within 10 seconds then we know there hasn't been any token updates from the
-            // master recently.  This would most likely indicate an issue with token updates from the backend servers
-            if (state.keycloak.isTokenExpired(10) === true) {
-                log('[jwt.js] slave forcing the updateToken call.  This would indicate an issue in the master tab with updating the token.');
+async function updateToken(force: boolean = false): Promise<ISimplePromise> {
+    try {
+        if (stopTokenUpdates === true) {
+            log('[jwt.js] Not updating the token as stopTokenUpdates is set to true.');
+            const promise = createPromise();
+            promise.setError();
+            return promise.promise;
+        }
+        const isFailCountPassed = await failCountPassed();
+        if (isFailCountPassed) {
+            log('[jwt.js] not updating token because updating failed more than ' + FAIL_COUNT_THRESHOLD + ' times in a row');
+        } else if (isLocalStorageAvailable && tokenUpdateScheduler) {
+            if (tokenUpdateScheduler.isMaster) {
+                log(`[jwt.js] running updateToken as this tab is master${force === true ? ', forcing the token update' : ', updating if within ' + REFRESH_TTE + ' seconds'}`);
                 return state.keycloak
-                    .updateToken(-1)
+                    .updateToken(force === true ? -1 : REFRESH_TTE)
                     .success(updateTokenSuccess)
-                    .error((e: any) => {
-                        log(`[jwt.js] slave force update token failed.`);
-                        updateTokenFailure(e);
-                    });
+                    .error((e: any) => updateTokenFailure(e));
             } else {
                 log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
                 // TODO -- consider broadcasting a message to the master to update.
                 // Also consider the implications of default returning a setSuccess here
                 return fakeSuccessPromise();
+
             }
-
-        }
-    } else {
-        log('[jwt.js] running updateToken (without cross-tab communcation)');
-        return state.keycloak
-            .updateToken(force === true ? -1 : REFRESH_TTE)
-            .success(updateTokenSuccess)
-            // ITokenUpdateFailure
-            .error((e: any) => {
-                if (iteration < RETRY_FAILED_TOKEN_UPDATE_COUNT) {
-                    log(`[jwt.js] update token failed, retrying up to ${RETRY_FAILED_TOKEN_UPDATE_COUNT} time(s)`);
-                    updateToken(force, iteration + 1);
-                } else {
-                    log(`[jwt.js] update token failed, already retried ${RETRY_FAILED_TOKEN_UPDATE_COUNT} time(s)`);
+        } else {
+            log('[jwt.js] running updateToken (without cross-tab communcation)');
+            return state.keycloak
+                .updateToken(force === true ? -1 : REFRESH_TTE)
+                .success(updateTokenSuccess)
+                // ITokenUpdateFailure
+                .error((e: any) => {
                     updateTokenFailure(e);
-                }
-            });
+                });
+        }
+    } catch (e) {
+        return e;
     }
-
 }
 
 /**
@@ -590,7 +662,7 @@ function cancelRefreshLoop(shouldStopTokenUpdates?: boolean) {
  * @memberof module:jwt
  * @private
  */
-function refreshLoop(): ISimplePromise {
+function refreshLoop(): Promise<ISimplePromise> {
     return updateToken();
 }
 
@@ -602,6 +674,10 @@ function refreshLoop(): ISimplePromise {
  */
 function updateTokenSuccess(refreshed: boolean) {
     log('[jwt.js] updateTokenSuccess, token was ' + ['not ', ''][~~refreshed] + 'refreshed');
+    if (refreshed) {
+        resetFailCount(); // token update worked, so reset number of consecutive failures
+    }
+
     setToken(state.keycloak.token);
     setRefreshToken(state.keycloak.refreshToken);
 
@@ -627,6 +703,7 @@ function updateTokenSuccess(refreshed: boolean) {
  */
 function updateTokenFailure(e: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
+    incFailCount();
     sendToSentry(new Error('Update token failure'), e);
 }
 
@@ -962,6 +1039,60 @@ function sendToSentry(error: Error, extra: Object) {
     }
 }
 
+/**
+  * Get the number of times in a row that token refresh has failed.
+  * @return {Number} the number of times that token refresh has failed
+  * @memberof module:jwt
+  */
+function getFailCount(): Promise<number> {
+    try {
+        return CacheUtils.get<INumberCache>(FAIL_COUNT_NAME).then((failCountCache) => {
+            return failCountCache.value;
+        }).catch((e) => {
+            return 0;
+        });
+    } catch (e) {
+        return Promise.resolve(0);
+    }
+}
+
+
+/**
+ * Return whether or not the consecutive failure count has been exceeded.
+ * @memberof module:jwt
+ * @return {Boolean} has the consecutive failure count been exceeded
+ */
+function failCountPassed(): Promise<boolean> {
+    return getFailCount().then((count) => {
+        return count > FAIL_COUNT_THRESHOLD;
+    });
+}
+
+/**
+ * Increment the number of times in a row that token refresh has failed.
+ * @return {Number} the new, incremented number of times that token refresh has failed
+ */
+function incFailCount(): Promise<number> {
+    return getFailCount().then((failCount) => {
+        const newFailCount = failCount + 1;
+        const newFailCountCache: INumberCache = {
+            value: newFailCount
+        };
+        CacheUtils.set<INumberCache, number>(FAIL_COUNT_NAME, newFailCountCache);
+        return newFailCount;
+    });
+}
+
+/**
+ * Reset the number of times in a row that token refresh has failed.
+ */
+function resetFailCount(): Promise<INumberCache> {
+    const newFailCountCache: INumberCache = {
+        value: 0
+    };
+    return CacheUtils.set<INumberCache, number>(FAIL_COUNT_NAME, newFailCountCache);
+}
+
 const Jwt = {
     login: initialized(login),
     logout: initialized(logout),
@@ -982,12 +1113,17 @@ const Jwt = {
     startRefreshLoop: initialized(startRefreshLoop),
     isTokenExpired: initialized(isTokenExpired),
     onInit: onInit,
+    onAuthRefreshError: onAuthRefreshError,
+    onTokenExpired: onTokenExpired,
     onInitialUpdateToken: onInitialUpdateToken,
+    onAuthError: onAuthError,
     enableDebugLogging: enableDebugLogging,
     disableDebugLogging: disableDebugLogging,
     isMaster: isMaster,
     init: init,
     _state: state,
+    getFailCount: getFailCount,
+    failCountPassed: failCountPassed,
 };
 
 export default Jwt;

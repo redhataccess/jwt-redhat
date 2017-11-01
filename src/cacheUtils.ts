@@ -23,6 +23,7 @@ export interface IBaseCache<T> {
 
 export interface IStringCache extends IBaseCache<string> {}
 export interface IBooleanCache extends IBaseCache<boolean> {}
+export interface INumberCache extends IBaseCache<number> {}
 
 export class CacheUtils {
 
