@@ -14,10 +14,6 @@ import {
 } from './tokenUpdateScheduler';
 
 import {
-    createPromise,
-    ISimplePromise
-} from './simulatedPromise';
-import {
     IKeycloakOptions,
     IState,
     IJwtUser,
@@ -163,18 +159,6 @@ const events = {
 };
 
 document.cookie = TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
-
-function fakeSuccessPromise(): ISimplePromise {
-    const promise = createPromise();
-    promise.setSuccess();
-    return promise.promise;
-}
-
-// function fakeErrorPromise(e: any): ISimplePromise {
-//     const promise = createPromise();
-//     promise.setError(e);
-//     return promise.promise;
-// }
 
 /**
  * Log session-related messages to the console, in pre-prod environments.
@@ -592,38 +576,51 @@ function isTokenExpired(tte: number = REFRESH_TTE): boolean {
  * @memberof module:jwt
  * @private
  */
-async function updateToken(force: boolean = false): Promise<ISimplePromise> {
-    try {
-        const isFailCountPassed = await failCountPassed();
-        if (isFailCountPassed) {
-            log('[jwt.js] not updating token because updating failed more than ' + FAIL_COUNT_THRESHOLD + ' times in a row');
-        } else if (isLocalStorageAvailable && tokenUpdateScheduler) {
-            if (tokenUpdateScheduler.isMaster) {
-                log(`[jwt.js] running updateToken as this tab is master${force === true ? ', forcing the token update' : ', updating if within ' + REFRESH_TTE + ' seconds'}`);
-                return state.keycloak
-                    .updateToken(force === true ? -1 : REFRESH_TTE)
-                    .success(updateTokenSuccess)
-                    .error((e: any) => updateTokenFailure(e));
+async function updateToken(force: boolean = false): Promise<boolean> {
+    const isFailCountPassed = await failCountPassed();
+    return new Promise<boolean>((resolve, reject) => {
+        try {
+            if (isFailCountPassed) {
+                const msg = `Not updating token because updating failed more than ${FAIL_COUNT_THRESHOLD} times in a row`;
+                log(`[jwt.js] ${msg}`);
+                reject(msg);
+            } else if (isLocalStorageAvailable && tokenUpdateScheduler) {
+                if (tokenUpdateScheduler.isMaster) {
+                    log(`[jwt.js] running updateToken as this tab is master${force === true ? ', forcing the token update' : ', updating if within ' + REFRESH_TTE + ' seconds'}`);
+                    return state.keycloak
+                        .updateToken(force === true ? -1 : REFRESH_TTE)
+                        .success((refreshed: boolean) => {
+                            updateTokenSuccess(refreshed);
+                            resolve(refreshed);
+                        })
+                        .error((e: any) => {
+                            updateTokenFailure(e);
+                            reject(e);
+                        });
+                } else {
+                    log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
+                    // TODO -- consider broadcasting a message to the master to update.
+                    // Also consider the implications of default returning a setSuccess here
+                    resolve(false);
+                }
             } else {
-                log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
-                // TODO -- consider broadcasting a message to the master to update.
-                // Also consider the implications of default returning a setSuccess here
-                return fakeSuccessPromise();
-
+                log('[jwt.js] running updateToken (without cross-tab communcation)');
+                state.keycloak
+                    .updateToken(force === true ? -1 : REFRESH_TTE)
+                    .success((refreshed: boolean) => {
+                        updateTokenSuccess(refreshed);
+                        resolve(refreshed);
+                    })
+                    // ITokenUpdateFailure
+                    .error((e: any) => {
+                        updateTokenFailure(e);
+                        reject(e);
+                    });
             }
-        } else {
-            log('[jwt.js] running updateToken (without cross-tab communcation)');
-            return state.keycloak
-                .updateToken(force === true ? -1 : REFRESH_TTE)
-                .success(updateTokenSuccess)
-                // ITokenUpdateFailure
-                .error((e: any) => {
-                    updateTokenFailure(e);
-                });
+        } catch (e) {
+            reject(e);
         }
-    } catch (e) {
-        return e;
-    }
+    });
 }
 
 /**
@@ -666,7 +663,7 @@ function cancelRefreshLoop(shouldStopTokenUpdates?: boolean) {
  * @memberof module:jwt
  * @private
  */
-function refreshLoop(): Promise<ISimplePromise> {
+function refreshLoop(): Promise<boolean> {
     return updateToken();
 }
 
