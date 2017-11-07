@@ -459,7 +459,8 @@
                                                     statusText: req.statusText,
                                                     url: url,
                                                     date: (new Date()).toISOString(),
-                                                    minValidity: minValidity
+                                                    minValidity: minValidity,
+                                                    body: req.body
                                                 };
                                                 p.setError(tokenUpdateFailure);
                                             }

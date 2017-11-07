@@ -32,6 +32,7 @@ declare global {
 declare const Raven: {
     setUserContext: any;
     captureException: any;
+    setTagsContext: any;
 };
 
 /*
@@ -580,7 +581,7 @@ async function updateToken(force: boolean = false): Promise<boolean> {
     const isFailCountPassed = await failCountPassed();
     return new Promise<boolean>((resolve, reject) => {
         try {
-            if (isFailCountPassed) {
+            if (isFailCountPassed && force !== true) {
                 const msg = `Not updating token because updating failed more than ${FAIL_COUNT_THRESHOLD} times in a row`;
                 log(`[jwt.js] ${msg}`);
                 reject(msg);
@@ -664,7 +665,13 @@ function cancelRefreshLoop(shouldStopTokenUpdates?: boolean) {
  * @private
  */
 function refreshLoop(): Promise<boolean> {
-    return updateToken();
+    return updateToken().then((refreshed) => {
+        log('[jwt.js] The refresh loop ' + ['did not refresh', 'refreshed'][~~refreshed] + 'the token');
+        return refreshed;
+    }).catch((e) => {
+        log(`[jwt.js] The refresh loop failed to update the token due to: ${e}`);
+        return false;
+    });
 }
 
 /**
@@ -1027,6 +1034,19 @@ function setRavenUserContext() {
 }
 
 /**
+ * When the token expires
+ * @memberof module:jwt
+ * @private
+ */
+function expiresIn(): number {
+    try {
+        return state.keycloak.tokenParsed['exp'] - Math.ceil(new Date().getTime() / 1000) + state.keycloak.timeSkew;
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
  * Send current user context to Raven (JS error logging library).
  * @memberof module:jwt
  * @private
@@ -1036,6 +1056,11 @@ function sendToSentry(error: Error, extra: Object) {
     // context to RavenJS, for inclusion in Sentry error reports.
     userInfo = getUserInfo();
     if (typeof window.Raven !== 'undefined' && typeof window.Raven.captureException === 'function') {
+        Raven.setTagsContext({
+            is_authenticated: isAuthenticated(),
+            is_token_expired: state.keycloak.isTokenExpired(0),
+            token_expires_in: expiresIn()
+        });
         Raven.captureException(error, {extra: extra});
     }
 }
@@ -1125,6 +1150,7 @@ const Jwt = {
     _state: state,
     getFailCount: getFailCount,
     failCountPassed: failCountPassed,
+    expiresIn: expiresIn
 };
 
 export default Jwt;
