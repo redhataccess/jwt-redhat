@@ -8,7 +8,8 @@ import * as localForage      from 'localforage';
 export const CACHE_STORAGE_NAME = 'jwt-redhat-lf';
 
 localForage.config({
-    name: CACHE_STORAGE_NAME
+    name: CACHE_STORAGE_NAME,
+    driver: [localForage.LOCALSTORAGE]
 });
 
 export interface ICacheOptions {

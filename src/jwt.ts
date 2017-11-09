@@ -230,7 +230,17 @@ function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: 
     // TODO -- then this, also look in keycloak.js to see if any sort of exp field is set, I think so?
     return Promise.all([CacheUtils.get<IStringCache>(TOKEN_NAME), CacheUtils.get<IStringCache>(REFRESH_TOKEN_NAME)]).then((results) => {
 
-        if (results && results[0] && results[0].value !== 'undefined') { KEYCLOAK_INIT_OPTIONS.token = results[0].value; }
+        let token = null;
+        if (results && results[0] && results[0].value !== 'undefined') {
+             token = results[0].value;
+        } else {
+            token = lib.getCookieValue(TOKEN_NAME);
+        }
+
+        if (token) {
+            KEYCLOAK_INIT_OPTIONS.token = token;
+        }
+
         if (results && results[1] && results[1].value !== 'undefined') { KEYCLOAK_INIT_OPTIONS.refreshToken = results[1].value; }
 
         state.keycloak = Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
