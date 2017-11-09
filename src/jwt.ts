@@ -3,7 +3,6 @@ import { Keycloak }     from '../@types/keycloak';
 
 import {
     CacheUtils,
-    IStringCache,
     IBooleanCache,
     INumberCache
 } from './cacheUtils';
@@ -54,6 +53,63 @@ declare const Raven: {
 
 /*global JSON, define, console, document, window, chrometwo_require*/
 /*jslint browser: true*/
+
+const private_functions = {
+    /**
+     * Store things in local- or sessionStorage.  Because *Storage only
+     * accepts string values, the store will automatically serialize
+     * objects into JSON strings when you store them (set), and deserialize
+     * them back into objects when you retrieve them (get).
+     *
+     * @param {string} type Either "local" or "session", depending on
+     * whether you want localStorage or sessionStorage.
+     * @return {object} An object-friendly interface to localStorage or
+     * sessionStorage.
+     */
+    make_store: function (type) {
+        let store;
+        try {
+            // if DOM Storage is disabled in Chrome, merely referencing
+            // window.localStorage or window.sessionStorage will throw a
+            // DOMException.
+            store = window[type + 'Storage'];
+
+            // if DOM Storage is disabled in other browsers, it may not
+            // throw an error, but we should still throw one for them.
+            if (!store) throw new Error('DOM Storage is disabled');
+        } catch (e) {
+            // this means DOM storage is disabled in the users' browser, so
+            // we'll create an in-memory object that simulates the DOM
+            // Storage API.
+            store = {
+                getItem: function mem_store_get_item(key) {
+                    return store[key];
+                },
+                setItem: function mem_store_set_item(key, value) {
+                    return (store[key] = value);
+                },
+                removeItem: function mem_store_remove_item(key) {
+                    return delete store[key];
+                }
+            };
+        }
+        // The get and set here are used exclusively for getting and setting the token and refreshToken which are strings.
+        return {
+            get: function get(key) {
+                const value = store.getItem(key);
+                return value && JSON.parse(value);
+            },
+            set: function set(key, val) {
+                if (typeof val !== 'undefined') {
+                    return store.setItem(key, JSON.stringify(val));
+                }
+            },
+            remove: function remove(key) {
+                return store.removeItem(key);
+            }
+        };
+    }
+};
 
 const lib = {
 
@@ -107,6 +163,10 @@ const lib = {
         if (typeof console !== 'undefined') {
             console.log(message);
         }
+    },
+    store: {
+        local: private_functions.make_store('local'),
+        session: private_functions.make_store('session')
     }
 };
 const SSO_URL = ssoUrl();
@@ -139,13 +199,11 @@ const KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
 const origin = location.hostname;
 // const originWithPort = location.hostname + (location.port ? ':' + location.port : '');
 
-// const token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
-// const refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
-// let token = null;
-// let refreshToken = null;
+const token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
+const refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
 
-// if (token && token !== 'undefined') { KEYCLOAK_INIT_OPTIONS.token = token; }
-// if (refreshToken) { KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
+if (token && token !== 'undefined') { KEYCLOAK_INIT_OPTIONS.token = token; }
+if (refreshToken) { KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
 
 const state: IState = {
     initialized: false,
@@ -224,43 +282,22 @@ let stopTokenUpdates: boolean = false;
  * @memberof module:jwt
  * @private
  */
-function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Promise<void | Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError>> {
+function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError> {
     log('[jwt.js] initializing');
+    state.keycloak = Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
 
-    // TODO -- then this, also look in keycloak.js to see if any sort of exp field is set, I think so?
-    return Promise.all([CacheUtils.get<IStringCache>(TOKEN_NAME), CacheUtils.get<IStringCache>(REFRESH_TOKEN_NAME)]).then((results) => {
+    // wire up our handlers to keycloak's events
+    state.keycloak.onAuthSuccess = onAuthSuccess;
+    state.keycloak.onAuthError = onAuthError;
+    state.keycloak.onAuthRefreshSuccess = onAuthRefreshSuccess;
+    state.keycloak.onAuthRefreshError = onAuthRefreshErrorCallback;
+    state.keycloak.onAuthLogout = onAuthLogout;
+    state.keycloak.onTokenExpired = onTokenExpiredCallback;
 
-        let token = null;
-        if (results && results[0] && results[0].value !== 'undefined') {
-             token = results[0].value;
-        } else {
-            token = lib.getCookieValue(TOKEN_NAME);
-        }
-
-        if (token) {
-            KEYCLOAK_INIT_OPTIONS.token = token;
-        }
-
-        if (results && results[1] && results[1].value !== 'undefined') { KEYCLOAK_INIT_OPTIONS.refreshToken = results[1].value; }
-
-        state.keycloak = Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
-
-        // wire up our handlers to keycloak's events
-        state.keycloak.onAuthSuccess = onAuthSuccess;
-        state.keycloak.onAuthError = onAuthError;
-        state.keycloak.onAuthRefreshSuccess = onAuthRefreshSuccess;
-        state.keycloak.onAuthRefreshError = onAuthRefreshErrorCallback;
-        state.keycloak.onAuthLogout = onAuthLogout;
-        state.keycloak.onTokenExpired = onTokenExpiredCallback;
-
-        return state.keycloak
-            .init(keycloakInitOptions ? Object.assign({}, KEYCLOAK_INIT_OPTIONS, keycloakInitOptions) : KEYCLOAK_INIT_OPTIONS)
-            .success(keycloakInitSuccess)
-            .error(keycloakInitError);
-
-    }).catch((e) => {
-        log(`Error fetching cached token`);
-    });
+    return state.keycloak
+        .init(keycloakInitOptions ? Object.assign({}, KEYCLOAK_INIT_OPTIONS, keycloakInitOptions) : KEYCLOAK_INIT_OPTIONS)
+        .success(keycloakInitSuccess)
+        .error(keycloakInitError);
 }
 
 /**
@@ -733,10 +770,7 @@ function updateTokenFailure(e: ITokenUpdateFailure) {
  */
 function setRefreshToken(refresh_token: string) {
     log('[jwt.js] setting refresh token');
-    const newRefreshTokenCache: IStringCache = {
-        value: refresh_token
-    };
-    CacheUtils.set<IStringCache, string>(REFRESH_TOKEN_NAME, newRefreshTokenCache);
+    lib.store.local.set(REFRESH_TOKEN_NAME, refresh_token);
     broadcastUpdatedToken();
 }
 
@@ -748,7 +782,7 @@ function setRefreshToken(refresh_token: string) {
  */
 function removeRefreshToken() {
     log('[jwt.js] removing refresh token');
-    CacheUtils.delete(REFRESH_TOKEN_NAME);
+    lib.store.local.remove(REFRESH_TOKEN_NAME);
 }
 
 function broadcastUpdatedToken() {
@@ -777,10 +811,7 @@ function setToken(token) {
         // localStorage value exists so the token can be refreshed even if
         // it's been expired for a long time.
         log('[jwt.js] setting access token');
-        const newTokenCache: IStringCache = {
-            value: token
-        };
-        CacheUtils.set<IStringCache, string>(TOKEN_NAME, newTokenCache);
+        lib.store.local.set(TOKEN_NAME, token);
         document.cookie = TOKEN_NAME + '=' + token + ';path=/;max-age=' + 5 * 60 + ';domain=.' + origin + ';secure;';
         broadcastUpdatedToken();
     }
@@ -794,7 +825,7 @@ function setToken(token) {
  */
 function removeToken() {
     log('[jwt.js] removing access token');
-    CacheUtils.delete(TOKEN_NAME);
+    lib.store.local.remove(TOKEN_NAME);
     document.cookie = TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
 }
 
@@ -849,14 +880,8 @@ function getToken(): IToken {
  * @memberof module:jwt
  * @return {Object} the parsed JSON Web Token
  */
-function getStoredTokenValue(): Promise<string> {
-    return CacheUtils.get<IStringCache>(TOKEN_NAME).then((cachedToken) => {
-        if (cachedToken) {
-            return cachedToken.value;
-        } else {
-            return lib.getCookieValue(TOKEN_NAME);
-        }
-    });
+function getStoredTokenValue(): string {
+    return lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
 }
 
 /* Get a string containing the unparsed, base64-encoded JSON Web Token.
