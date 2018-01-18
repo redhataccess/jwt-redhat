@@ -1,6 +1,6 @@
 {
   "name": "jwt-redhat",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "Client side JavaScript library to interact with Red Hat JWT",
   "main": "dist/jwt.js",
   "types": "src/index.d.ts",
@@ -19,16 +19,16 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^7.0.22",
-    "@types/webpack": "^3.0.14",
+    "@types/webpack": "^3.8.3",
     "ava": "^0.23.0",
     "btoa-lite": "^1.0.0",
-    "localforage": "^1.5.2",
+    "localforage": "^1.5.5",
     "rimraf": "^2.6.2",
-    "ts-loader": "^3.0.5",
+    "ts-loader": "^3.2.0",
     "ts-node": "^3.3.0",
-    "tslint": "^5.8.0",
+    "tslint": "^5.9.1",
     "tslint-loader": "^3.5.3",
-    "typescript": "^2.5.3",
-    "webpack": "^3.8.1"
+    "typescript": "^2.6.2",
+    "webpack": "^3.10.0"
   }
 }

@@ -214,6 +214,7 @@ const events = {
     init: [],
     token: [],
     refreshError: [],
+    refreshSuccess: [],
     tokenExpired: []
 };
 
@@ -274,7 +275,6 @@ if (tokenUpdateScheduler) {
 
 // Keep track of the setInterval for the refresh token so we can cancel it and restart it if need be
 let refreshIntervalId;
-let stopTokenUpdates: boolean = false;
 
 /**
  * Kicks off all the session-related things.
@@ -289,7 +289,7 @@ function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: 
     // wire up our handlers to keycloak's events
     state.keycloak.onAuthSuccess = onAuthSuccess;
     state.keycloak.onAuthError = onAuthError;
-    state.keycloak.onAuthRefreshSuccess = onAuthRefreshSuccess;
+    state.keycloak.onAuthRefreshSuccess = onAuthRefreshSuccessCallback;
     state.keycloak.onAuthRefreshError = onAuthRefreshErrorCallback;
     state.keycloak.onAuthLogout = onAuthLogout;
     state.keycloak.onTokenExpired = onTokenExpiredCallback;
@@ -345,6 +345,22 @@ function handleInitEvents() {
 function handleRefreshErrorEvents() {
     if (events.refreshError.length > 0) {
         events.refreshError.forEach((event) => {
+            if (typeof event === 'function') {
+                event(Jwt);
+            }
+        });
+    }
+}
+
+/**
+ * Call refresh success events
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function handleRefreshSuccessEvents() {
+    if (events.refreshSuccess.length > 0) {
+        events.refreshSuccess.forEach((event) => {
             if (typeof event === 'function') {
                 event(Jwt);
             }
@@ -485,6 +501,16 @@ function keycloakRefreshErrorHandler() {
 }
 
 /**
+ * Call events after keycloak auth refresh success.
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function keycloakRefreshSuccessHandler() {
+    handleRefreshSuccessEvents();
+}
+
+/**
  * Call events after keycloak token expired
  *
  * @memberof module:jwt
@@ -557,8 +583,9 @@ function onAuthError() {
     log('[jwt.js] onAuthError');
 }
 
-function onAuthRefreshSuccess() {
+function onAuthRefreshSuccessCallback() {
     log('[jwt.js] onAuthRefreshSuccess');
+    keycloakRefreshSuccessHandler();
 }
 
 function onAuthRefreshErrorCallback() {
@@ -576,6 +603,16 @@ function onAuthRefreshErrorCallback() {
 function onAuthRefreshError(func: Function) {
     log('[jwt.js] registering auth refresh error handler');
     events.refreshError.push(func);
+}
+
+/**
+ * Register a function to be called when keycloak has successfully to refresh the session.
+ *
+ * @memberof module:jwt
+ */
+function onAuthRefreshSuccess(func: Function) {
+    log('[jwt.js] registering auth refresh success handler');
+    events.refreshSuccess.push(func);
 }
 
 function onAuthLogout() { log('[jwt.js] onAuthLogout'); }
@@ -680,7 +717,6 @@ async function updateToken(force: boolean = false): Promise<boolean> {
  * @private
  */
 function startRefreshLoop() {
-    stopTokenUpdates = false;
     refreshLoop();
     if (!refreshIntervalId) {
         refreshIntervalId = setInterval(refreshLoop, REFRESH_INTERVAL);
@@ -698,9 +734,6 @@ function cancelRefreshLoop(shouldStopTokenUpdates?: boolean) {
     if (refreshIntervalId) {
         clearInterval(refreshIntervalId);
         log('[jwt.js] token refresh interval cancelled');
-    }
-    if (shouldStopTokenUpdates === true) {
-        stopTokenUpdates = true;
     }
 }
 
@@ -812,7 +845,7 @@ function setToken(token) {
         // it's been expired for a long time.
         log('[jwt.js] setting access token');
         lib.store.local.set(TOKEN_NAME, token);
-        document.cookie = TOKEN_NAME + '=' + token + ';path=/;max-age=' + 5 * 60 + ';domain=.' + origin + ';secure;';
+        document.cookie = TOKEN_NAME + '=' + token + ';path=/;max-age=' + 15 * 60 + ';domain=.' + origin + ';secure;';
         broadcastUpdatedToken();
     }
 }
@@ -1175,6 +1208,7 @@ const Jwt = {
     isTokenExpired: initialized(isTokenExpired),
     onInit: onInit,
     onAuthRefreshError: onAuthRefreshError,
+    onAuthRefreshSuccess: onAuthRefreshSuccess,
     onTokenExpired: onTokenExpired,
     onInitialUpdateToken: onInitialUpdateToken,
     onAuthError: onAuthError,
