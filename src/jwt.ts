@@ -215,6 +215,7 @@ const events = {
     token: [],
     refreshError: [],
     refreshSuccess: [],
+    logout: [],
     tokenExpired: []
 };
 
@@ -291,7 +292,7 @@ function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: 
     state.keycloak.onAuthError = onAuthError;
     state.keycloak.onAuthRefreshSuccess = onAuthRefreshSuccessCallback;
     state.keycloak.onAuthRefreshError = onAuthRefreshErrorCallback;
-    state.keycloak.onAuthLogout = onAuthLogout;
+    state.keycloak.onAuthLogout = onAuthLogoutCallback;
     state.keycloak.onTokenExpired = onTokenExpiredCallback;
 
     return state.keycloak
@@ -361,6 +362,22 @@ function handleRefreshErrorEvents() {
 function handleRefreshSuccessEvents() {
     if (events.refreshSuccess.length > 0) {
         events.refreshSuccess.forEach((event) => {
+            if (typeof event === 'function') {
+                event(Jwt);
+            }
+        });
+    }
+}
+
+/**
+ * Call logout events
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function handleLogoutEvents() {
+    if (events.logout.length > 0) {
+        events.logout.forEach((event) => {
             if (typeof event === 'function') {
                 event(Jwt);
             }
@@ -511,6 +528,16 @@ function keycloakRefreshSuccessHandler() {
 }
 
 /**
+ * Call events after keycloak auth logout.
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function keycloakLogoutHandler() {
+    handleLogoutEvents();
+}
+
+/**
  * Call events after keycloak token expired
  *
  * @memberof module:jwt
@@ -593,6 +620,11 @@ function onAuthRefreshErrorCallback() {
     keycloakRefreshErrorHandler();
 }
 
+function onAuthLogoutCallback() {
+    log('[jwt.js] onAuthLogout');
+    keycloakLogoutHandler();
+}
+
 /**
  * Register a function to be called when keycloak has failed to refresh the session.  Runs
  * immediately if already initialized.  When called, the function will be
@@ -615,7 +647,15 @@ function onAuthRefreshSuccess(func: Function) {
     events.refreshSuccess.push(func);
 }
 
-function onAuthLogout() { log('[jwt.js] onAuthLogout'); }
+/**
+ * Register a function to be called when keycloak has logged out.
+ *
+ * @memberof module:jwt
+ */
+function onAuthLogout(func: Function) {
+    log('[jwt.js] registering auth logout handler');
+    events.logout.push(func);
+}
 
 function onTokenExpiredCallback() {
     log('[jwt.js] onTokenExpired');
@@ -746,7 +786,7 @@ function cancelRefreshLoop(shouldStopTokenUpdates?: boolean) {
  */
 function refreshLoop(): Promise<boolean> {
     return updateToken().then((refreshed) => {
-        log('[jwt.js] The refresh loop ' + ['did not refresh', 'refreshed'][~~refreshed] + 'the token');
+        log('[jwt.js] The refresh loop ' + ['did not refresh', 'refreshed'][~~refreshed] + ' the token');
         return refreshed;
     }).catch((e) => {
         log(`[jwt.js] The refresh loop failed to update the token due to: ${e}`);
@@ -1209,6 +1249,7 @@ const Jwt = {
     onInit: onInit,
     onAuthRefreshError: onAuthRefreshError,
     onAuthRefreshSuccess: onAuthRefreshSuccess,
+    onAuthLogout: onAuthLogout,
     onTokenExpired: onTokenExpired,
     onInitialUpdateToken: onInitialUpdateToken,
     onAuthError: onAuthError,
