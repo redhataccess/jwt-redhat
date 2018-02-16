@@ -478,8 +478,8 @@
                     var iframePromise = checkLoginIframe();
                     iframePromise.success(function() {
                         exec();
-                    }).error(function() {
-                        promise.setError();
+                    }).error(function(e) {
+                        promise.setError(e);
                     });
                 } else {
                     exec();
@@ -882,7 +882,8 @@
                         if (event.data == 'unchanged') {
                             promise.setSuccess();
                         } else {
-                            promise.setError();
+                            // TODO -- if ever upgrading keycloak to upstream see https://github.com/keycloak/keycloak/pull/5008 to ensure this error message stays inline
+                            promise.setError(new Error('Cookie sessionId and keycloak sessionId do not match.  Please logout and log back in.'));
                         }
                     }
                 };

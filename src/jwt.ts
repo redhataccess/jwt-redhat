@@ -185,7 +185,8 @@ let timeSkew = null;
 
 const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     realm: 'redhat-external',
-    clientId: 'unifiedui',
+    // realm: 'short-session',
+    clientId: 'changeme',
     url: SSO_URL,
 };
 
@@ -1166,8 +1167,10 @@ function sendToSentry(error: Error, extra: Object) {
     if (typeof window.Raven !== 'undefined' && typeof window.Raven.captureException === 'function') {
         Raven.setTagsContext({
             is_authenticated: isAuthenticated(),
-            is_token_expired: state.keycloak.isTokenExpired(0),
-            token_expires_in: expiresIn()
+            is_token_expired: state.keycloak.authenticated ? state.keycloak.isTokenExpired(0) : null,
+            token_expires_in: expiresIn(),
+            // TODO -- if ever upgrading keycloak to upstream see https://github.com/keycloak/keycloak/pull/5008 to ensure this error message stays inline
+            state_changed: extra && (extra as Error).message && (extra as Error).message.toLowerCase().indexOf('Cookie sessionId and keycloak sessionId do not match') !== -1
         });
         Raven.captureException(error, {extra: extra});
     }
