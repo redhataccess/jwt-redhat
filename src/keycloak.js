@@ -882,7 +882,7 @@
                         if (event.data == 'unchanged') {
                             promise.setSuccess();
                         } else {
-                            promise.setError(new Error('state changed'));
+                            promise.setError(new Error('Cookie sessionId and keycloak sessionId do not match.  Please logout and log back in.'));
                         }
                     }
                 };

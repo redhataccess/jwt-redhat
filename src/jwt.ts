@@ -1169,7 +1169,7 @@ function sendToSentry(error: Error, extra: Object) {
             is_authenticated: isAuthenticated(),
             is_token_expired: state.keycloak.authenticated ? state.keycloak.isTokenExpired(0) : null,
             token_expires_in: expiresIn(),
-            state_changed: extra && (extra as Error).message === 'state changed'
+            state_changed: extra && (extra as Error).message && (extra as Error).message.toLowerCase().indexOf('Cookie sessionId and keycloak sessionId do not match') !== -1
         });
         Raven.captureException(error, {extra: extra});
     }
