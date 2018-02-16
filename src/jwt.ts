@@ -186,7 +186,7 @@ let timeSkew = null;
 const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     realm: 'redhat-external',
     // realm: 'short-session',
-    clientId: 'unifiedui',
+    clientId: 'changeme',
     url: SSO_URL,
 };
 
