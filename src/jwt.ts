@@ -185,6 +185,7 @@ let timeSkew = null;
 
 const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     realm: 'redhat-external',
+    // realm: 'short-session',
     clientId: 'unifiedui',
     url: SSO_URL,
 };
@@ -1166,8 +1167,9 @@ function sendToSentry(error: Error, extra: Object) {
     if (typeof window.Raven !== 'undefined' && typeof window.Raven.captureException === 'function') {
         Raven.setTagsContext({
             is_authenticated: isAuthenticated(),
-            is_token_expired: state.keycloak.isTokenExpired(0),
-            token_expires_in: expiresIn()
+            is_token_expired: state.keycloak.authenticated ? state.keycloak.isTokenExpired(0) : null,
+            token_expires_in: expiresIn(),
+            state_changed: extra && (extra as Error).message === 'state changed'
         });
         Raven.captureException(error, {extra: extra});
     }

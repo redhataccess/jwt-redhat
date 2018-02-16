@@ -478,8 +478,8 @@
                     var iframePromise = checkLoginIframe();
                     iframePromise.success(function() {
                         exec();
-                    }).error(function() {
-                        promise.setError();
+                    }).error(function(e) {
+                        promise.setError(e);
                     });
                 } else {
                     exec();
@@ -882,7 +882,7 @@
                         if (event.data == 'unchanged') {
                             promise.setSuccess();
                         } else {
-                            promise.setError();
+                            promise.setError(new Error('state changed'));
                         }
                     }
                 };
