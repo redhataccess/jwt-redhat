@@ -169,7 +169,6 @@ const lib = {
         session: private_functions.make_store('session')
     }
 };
-const SSO_URL = ssoUrl();
 const INTERNAL_ROLE = 'redhat:employees';
 const TOKEN_NAME = 'rh_jwt';
 const REFRESH_TOKEN_NAME = 'rh_refresh_token';
@@ -186,8 +185,7 @@ let timeSkew = null;
 const KEYCLOAK_OPTIONS: IKeycloakOptions = {
     realm: 'redhat-external',
     // realm: 'short-session',
-    clientId: 'changeme',
-    url: SSO_URL,
+    clientId: 'changeme'
 };
 
 const KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
@@ -286,7 +284,11 @@ let refreshIntervalId;
  */
 function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError> {
     log('[jwt.js] initializing');
-    state.keycloak = Keycloak(keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS);
+
+    const options = keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS;
+    options.url = !options.url ? ssoUrl(options.internalAuth) : options.url;
+
+    state.keycloak = Keycloak(options);
 
     // wire up our handlers to keycloak's events
     state.keycloak.onAuthSuccess = onAuthSuccess;
@@ -555,7 +557,8 @@ function keycloakTokenExpiredHandler() {
  * @returns {String} a URL to the SSO service
  * @private
  */
-function ssoUrl() {
+function ssoUrl(isInternal?: boolean) {
+    const subDomain = isInternal === true ? 'auth' : 'sso'; // defaults to sso
     switch (location.hostname) {
         // Valid PROD URLs
         case 'access.redhat.com':
@@ -564,14 +567,14 @@ function ssoUrl() {
         case 'hardware.redhat.com':
         case 'unified.gsslab.rdu2.redhat.com':
             log('[jwt.js] ENV: prod');
-            return 'https://sso.redhat.com/auth';
+            return `https://${subDomain}.redhat.com/auth`;
 
         // Valid STAGE URLs
         case 'access.stage.redhat.com':
         case 'accessstage.usersys.redhat.com':
         case 'stage.foo.redhat.com':
             log('[jwt.js] ENV: stage');
-            return 'https://sso.stage.redhat.com/auth';
+            return `https://${subDomain}.stage.redhat.com/auth`;
 
         // Valid QA URLs
         case 'access.qa.redhat.com':
@@ -579,11 +582,11 @@ function ssoUrl() {
         case 'accessqa.usersys.redhat.com':
         case 'unified-qa.gsslab.pnq2.redhat.com':
             log('[jwt.js] ENV: qa');
-            return 'https://sso.qa.redhat.com/auth';
+            return `https://${subDomain}.qa.redhat.com/auth`;
 
         case 'ui.foo.redhat.com':
             log('[jwt.js] ENV: qa / dev');
-            return 'https://sso.dev1.redhat.com/auth';
+            return `https://${subDomain}.dev1.redhat.com/auth`;
 
         // Valid CI URLs
         case 'access.devgssci.devlab.phx1.redhat.com':
@@ -591,7 +594,7 @@ function ssoUrl() {
         case 'ci.foo.redhat.com':
         default:
                 log('[jwt.js] ENV: ci');
-                return 'https://sso.dev2.redhat.com/auth';
+                return `https://${subDomain}.dev2.redhat.com/auth`;
         }
 }
 
