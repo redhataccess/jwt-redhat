@@ -3,8 +3,9 @@ import { Keycloak } from '../@types/keycloak';
 export interface IKeycloakOptions {
     realm: string;
     clientId: string;
-    url: string;
+    url?: string;
     credentials?: any;
+    internalAuth?: boolean;
 }
 
 export interface IKeycloakInitOptions {
