@@ -212,6 +212,7 @@ const state: IState = {
 const events = {
     init: [],
     token: [],
+    tokenMismatch: [],
     refreshError: [],
     refreshSuccess: [],
     logout: [],
@@ -420,6 +421,21 @@ function handleTokenEvents() {
 }
 
 /**
+ * Call any token mismatch event handlers that have are registered.  One time call then removed.
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function handleTokenMismatchEvents() {
+    while (events.tokenMismatch.length) {
+        const event = events.tokenMismatch.shift();
+        if (typeof event === 'function') {
+            event(Jwt);
+        }
+    }
+}
+
+/**
  * Register a function to be called when jwt.js has initialized.  Runs
  * immediately if already initialized.  When called, the function will be
  * passed a reference to the jwt.js API.
@@ -450,6 +466,21 @@ function onInitialUpdateToken(func: Function) {
         func(Jwt);
     } else {
         events.token.push(func);
+    }
+}
+
+/**
+ * Register a function to be called when the tokens mismatch.  This is a hard
+ * error caused when mixing sso envs/tokens and requires a logout/log back in
+ * @memberof module:jwt
+ */
+function onTokenMismatch(func: Function) {
+    log(`[jwt.js] registering the onTokenMismatch handler`);
+    if (state.initialized) {
+        log(`[jwt.js] running event handler: onTokenMismatch`);
+        func(Jwt);
+    } else {
+        events.tokenMismatch.push(func);
     }
 }
 
@@ -588,13 +619,17 @@ function ssoUrl(isInternal?: boolean) {
             log('[jwt.js] ENV: qa / dev');
             return `https://${subDomain}.dev1.redhat.com/auth`;
 
+        case 'fte.foo.redhat.com':
+            log('[jwt.js] ENV: fte');
+            return `https://${subDomain}.dev.redhat.com/auth`;
+
         // Valid CI URLs
         case 'access.devgssci.devlab.phx1.redhat.com':
         case 'accessci.usersys.redhat.com':
         case 'ci.foo.redhat.com':
         default:
-                log('[jwt.js] ENV: ci');
-                return `https://${subDomain}.dev2.redhat.com/auth`;
+            log('[jwt.js] ENV: ci');
+            return `https://${subDomain}.dev2.redhat.com/auth`;
         }
 }
 
@@ -794,6 +829,9 @@ function refreshLoop(): Promise<boolean> {
         return refreshed;
     }).catch((e) => {
         log(`[jwt.js] The refresh loop failed to update the token due to: ${e}`);
+        if (e.message.indexOf('not match') !== -1) {
+            handleTokenMismatchEvents();
+        }
         return false;
     });
 }
@@ -1258,6 +1296,7 @@ const Jwt = {
     onAuthLogout: onAuthLogout,
     onTokenExpired: onTokenExpired,
     onInitialUpdateToken: onInitialUpdateToken,
+    onTokenMismatch: onTokenMismatch,
     onAuthError: onAuthError,
     enableDebugLogging: enableDebugLogging,
     disableDebugLogging: disableDebugLogging,
