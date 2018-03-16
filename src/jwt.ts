@@ -18,8 +18,8 @@ import {
     IJwtUser,
     ILoginOptions,
     IToken,
-    IKeycloakInitOptions,
-    ITokenUpdateFailure
+    ITokenUpdateFailure,
+    IJwtOptions
 } from './models';
 
 declare global {
@@ -178,17 +178,18 @@ const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this m
 const FAIL_COUNT_NAME = 'refresh_fail_count';
 const FAIL_COUNT_THRESHOLD = 5; // how many times in a row token refresh can fail before we give up trying
 let userInfo: IJwtUser;  // To be used to set the user context in Raven
+let disablePolling = false;
 
 // This is explicitly to track when the first successfull updateToken happens.
 let timeSkew = null;
 
-const KEYCLOAK_OPTIONS: IKeycloakOptions = {
+const DEFAULT_KEYCLOAK_OPTIONS: IKeycloakOptions = {
     realm: 'redhat-external',
     // realm: 'short-session',
     clientId: 'changeme'
 };
 
-const KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
+const DEFAULT_KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
     responseMode: 'query', // was previously fragment and doesn't work with fragment.
     flow: 'standard',
     token: null,
@@ -201,8 +202,8 @@ const origin = location.hostname;
 const token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
 const refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
 
-if (token && token !== 'undefined') { KEYCLOAK_INIT_OPTIONS.token = token; }
-if (refreshToken) { KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
+if (token && token !== 'undefined') { DEFAULT_KEYCLOAK_INIT_OPTIONS.token = token; }
+if (refreshToken) { DEFAULT_KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
 
 const state: IState = {
     initialized: false,
@@ -283,11 +284,12 @@ let refreshIntervalId;
  * @memberof module:jwt
  * @private
  */
-function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError> {
+function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError> {
     log('[jwt.js] initializing');
 
-    const options = keycloakOptions ? Object.assign({}, KEYCLOAK_OPTIONS, keycloakOptions) : KEYCLOAK_OPTIONS;
+    const options = jwtOptions.keycloakOptions ? Object.assign({}, DEFAULT_KEYCLOAK_OPTIONS, jwtOptions.keycloakOptions) : DEFAULT_KEYCLOAK_OPTIONS;
     options.url = !options.url ? ssoUrl(options.internalAuth) : options.url;
+    disablePolling = jwtOptions.disablePolling;
 
     state.keycloak = Keycloak(options);
 
@@ -300,7 +302,7 @@ function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: 
     state.keycloak.onTokenExpired = onTokenExpiredCallback;
 
     return state.keycloak
-        .init(keycloakInitOptions ? Object.assign({}, KEYCLOAK_INIT_OPTIONS, keycloakInitOptions) : KEYCLOAK_INIT_OPTIONS)
+        .init(jwtOptions.keycloakInitOptions ? Object.assign({}, DEFAULT_KEYCLOAK_INIT_OPTIONS, jwtOptions.keycloakInitOptions) : DEFAULT_KEYCLOAK_INIT_OPTIONS)
         .success(keycloakInitSuccess)
         .error(keycloakInitError);
 }
@@ -311,7 +313,7 @@ function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: 
  * @param {Boolean} authenticated whether the user is authenticated or not
  * @private
  */
-function keycloakInitSuccess(authenticated) {
+function keycloakInitSuccess(authenticated: boolean) {
     log('[jwt.js] initialized (authenticated: ' + authenticated + ')');
     if (authenticated) {
         setToken(state.keycloak.token);
@@ -797,10 +799,14 @@ async function updateToken(force: boolean = false): Promise<boolean> {
  */
 function startRefreshLoop() {
     refreshLoop();
-    if (!refreshIntervalId) {
-        refreshIntervalId = setInterval(refreshLoop, REFRESH_INTERVAL);
+    if (disablePolling === true) {
+        log('[jwt.js] Not starting the refresh loop interval as disablePolling is true.');
     } else {
-        log('[jwt.js] Cannot start refresh loop as it is already started.');
+        if (!refreshIntervalId) {
+            refreshIntervalId = setInterval(refreshLoop, REFRESH_INTERVAL);
+        } else {
+            log('[jwt.js] Cannot start refresh loop as it is already started.');
+        }
     }
 }
 
