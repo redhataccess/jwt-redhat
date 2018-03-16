@@ -20,6 +20,16 @@ export interface IKeycloakInitOptions {
     idToken?: string;
 }
 
+export interface IJwtOptions {
+    keycloakOptions: Partial<IKeycloakOptions>;
+    keycloakInitOptions?: Partial<IKeycloakInitOptions>;
+    // If enabled disables updating the token automatically
+    // It would now be the responsibility of the parent
+    // app to do this.
+    disablePolling?: boolean;
+}
+
+
 export interface ILoginOptions {
     redirectUri?: string;
 }
