@@ -835,7 +835,7 @@ function refreshLoop(): Promise<boolean> {
         return refreshed;
     }).catch((e) => {
         log(`[jwt.js] The refresh loop failed to update the token due to: ${e}`);
-        if (e.message.indexOf('not match') !== -1) {
+        if (e && e.message && e.message.indexOf('not match') !== -1) {
             handleTokenMismatchEvents();
         }
         return false;
