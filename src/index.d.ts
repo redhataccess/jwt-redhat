@@ -8,7 +8,8 @@ import {
     IJwtUser,
     IKeycloakOptions,
     IState,
-    IKeycloakInitOptions
+    IKeycloakInitOptions,
+    IJwtOptions
 } from './models';
 
 declare namespace Jwt {
@@ -38,7 +39,7 @@ declare namespace Jwt {
     export function onInitialUpdateToken(func: Function): void;
     export function onTokenMismatch(func: Function): void;
     export function isMaster(): boolean;
-    export function init(keycloakOptions: Partial<IKeycloakOptions>, keycloakInitOptions?: Partial<IKeycloakInitOptions>): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError>;
+    export function init(options: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError>;
     export function enableDebugLogging();
     export function disableDebugLogging();
     export const _state: IState;

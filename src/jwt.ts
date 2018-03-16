@@ -800,7 +800,7 @@ async function updateToken(force: boolean = false): Promise<boolean> {
 function startRefreshLoop() {
     refreshLoop();
     if (disablePolling === true) {
-        log('[jwt.js] Not starting the refresh loop as disablePolling is true.');
+        log('[jwt.js] Not starting the refresh loop interval as disablePolling is true.');
     } else {
         if (!refreshIntervalId) {
             refreshIntervalId = setInterval(refreshLoop, REFRESH_INTERVAL);
