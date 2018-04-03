@@ -18,6 +18,7 @@ import {
     IJwtUser,
     ILoginOptions,
     IToken,
+    IInternalToken,
     ITokenUpdateFailure,
     IJwtOptions
 } from './models';
@@ -982,7 +983,7 @@ function removeToken() {
  * @memberof module:jwt
  * @return {Object} the parsed JSON Web Token
  */
-function getToken(): IToken {
+function getToken(): IToken | IInternalToken {
     // any here as actual RH tokens have more information than this, which we will customize with IToken above
     return state.keycloak.tokenParsed as any;
 }
@@ -1023,7 +1024,7 @@ function getEncodedToken(): string {
  */
 function getUserInfo(): IJwtUser {
     // the properties to return
-    const token = getToken();
+    const token = getToken() as IToken;
     return token ? {
         user_id: token.user_id,
         id: token.user_id,
