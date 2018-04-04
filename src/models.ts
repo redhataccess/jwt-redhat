@@ -122,3 +122,40 @@ export interface ITokenUpdateFailure {
     tokenExpired: boolean;
     expiresIn: number;
 }
+
+export interface RealmAccess {
+    roles: string[];
+}
+
+export interface Account {
+    roles: string[];
+}
+
+export interface ResourceAccess {
+    account: Account;
+}
+
+export interface IInternalToken {
+    jti: string;
+    exp: number;
+    nbf: number;
+    iat: number;
+    iss: string;
+    aud: string;
+    sub: string;
+    typ: string;
+    azp: string;
+    nonce: string;
+    auth_time: number;
+    session_state: string;
+    acr: string;
+    client_session: string;
+    'allowed-origins': string[];
+    realm_access: RealmAccess;
+    resource_access: ResourceAccess;
+    name: string;
+    preferred_username: string;
+    given_name: string;
+    family_name: string;
+    email: string;
+}

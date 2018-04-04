@@ -5,6 +5,7 @@ import { INumberCache }     from './cacheUtils';
 import { 
     ILoginOptions,
     IToken,
+    IInternalToken,
     IJwtUser,
     IKeycloakOptions,
     IState,
@@ -23,7 +24,7 @@ declare namespace Jwt {
     export function getLoginUrl(options?: ILoginOptions): string;
     export function getLogoutUrl(): string;
     export function getAccountUrl(): string;
-    export function getToken(): IToken;
+    export function getToken(): IToken | IInternalToken;
     export function getStoredTokenValue(): string;
     export function getEncodedToken(): string;
     export function getUserInfo(): IJwtUser;
