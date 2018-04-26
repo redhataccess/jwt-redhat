@@ -179,8 +179,10 @@ const DEFAULT_KEYCLOAK_OPTIONS: IKeycloakOptions = {
 
 const INTERNAL_ROLE = 'redhat:employees';
 const COOKIE_TOKEN_NAME = `rh_jwt`;
-let TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}_jwt`;
-let REFRESH_TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}_refresh_token`;
+const TOKEN_SURFIX = '_jwt';
+const REFRESH_TOKEN_NAME_SURFIX = '_refresh_token';
+let TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${TOKEN_SURFIX}`;
+let REFRESH_TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
 const TOKEN_EXP_TTE = 58; // Seconds to check forward if the token will expire
 const REFRESH_INTERVAL = 1 * TOKEN_EXP_TTE * 1000; // ms. check token for upcoming expiration every this many milliseconds
 const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this many seconds from now
@@ -295,8 +297,8 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     // and token initialization into the init function where we get the actual clientId
     // We don't need to change COOKIE_TOKEN_NAME as its domain specific and will not
     // conflict with other applications.
-    TOKEN_NAME = `${options.clientId}_jwt`;
-    REFRESH_TOKEN_NAME = `${options.clientId}_refresh_token`;
+    TOKEN_NAME = `${options.clientId}${TOKEN_SURFIX}`;
+    REFRESH_TOKEN_NAME = `${options.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
 
     token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
     refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
