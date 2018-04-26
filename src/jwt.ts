@@ -170,9 +170,19 @@ const lib = {
         session: private_functions.make_store('session')
     }
 };
+
+const DEFAULT_KEYCLOAK_OPTIONS: IKeycloakOptions = {
+    realm: 'redhat-external',
+    // realm: 'short-session',
+    clientId: 'changeme'
+};
+
 const INTERNAL_ROLE = 'redhat:employees';
-const TOKEN_NAME = 'rh_jwt';
-const REFRESH_TOKEN_NAME = 'rh_refresh_token';
+const COOKIE_TOKEN_NAME = `rh_jwt`;
+const TOKEN_SURFIX = '_jwt';
+const REFRESH_TOKEN_NAME_SURFIX = '_refresh_token';
+let TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${TOKEN_SURFIX}`;
+let REFRESH_TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
 const TOKEN_EXP_TTE = 58; // Seconds to check forward if the token will expire
 const REFRESH_INTERVAL = 1 * TOKEN_EXP_TTE * 1000; // ms. check token for upcoming expiration every this many milliseconds
 const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this many seconds from now
@@ -184,12 +194,6 @@ let disablePolling = false;
 // This is explicitly to track when the first successfull updateToken happens.
 let timeSkew = null;
 
-const DEFAULT_KEYCLOAK_OPTIONS: IKeycloakOptions = {
-    realm: 'redhat-external',
-    // realm: 'short-session',
-    clientId: 'changeme'
-};
-
 const DEFAULT_KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
     responseMode: 'query', // was previously fragment and doesn't work with fragment.
     flow: 'standard',
@@ -200,11 +204,8 @@ const DEFAULT_KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
 const origin = location.hostname;
 // const originWithPort = location.hostname + (location.port ? ':' + location.port : '');
 
-const token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
-const refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
-
-if (token && token !== 'undefined') { DEFAULT_KEYCLOAK_INIT_OPTIONS.token = token; }
-if (refreshToken) { DEFAULT_KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
+let token = null;
+let refreshToken = null;
 
 const state: IState = {
     initialized: false,
@@ -221,7 +222,7 @@ const events = {
     tokenExpired: []
 };
 
-document.cookie = TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
+document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
 
 /**
  * Log session-related messages to the console, in pre-prod environments.
@@ -291,6 +292,21 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     const options = jwtOptions.keycloakOptions ? Object.assign({}, DEFAULT_KEYCLOAK_OPTIONS, jwtOptions.keycloakOptions) : DEFAULT_KEYCLOAK_OPTIONS;
     options.url = !options.url ? ssoUrl(options.internalAuth) : options.url;
     disablePolling = jwtOptions.disablePolling;
+
+    // Token names are now namespaced by clientId, thus moving the token_name evaluation
+    // and token initialization into the init function where we get the actual clientId
+    // We don't need to change COOKIE_TOKEN_NAME as its domain specific and will not
+    // conflict with other applications.
+    TOKEN_NAME = `${options.clientId}${TOKEN_SURFIX}`;
+    REFRESH_TOKEN_NAME = `${options.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
+
+    token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
+    refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
+
+    if (token && token !== 'undefined') { DEFAULT_KEYCLOAK_INIT_OPTIONS.token = token; }
+    if (refreshToken) { DEFAULT_KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
+
+
 
     state.keycloak = Keycloak(options);
 
@@ -934,7 +950,7 @@ function setToken(token) {
         // it's been expired for a long time.
         log('[jwt.js] setting access token');
         lib.store.local.set(TOKEN_NAME, token);
-        document.cookie = TOKEN_NAME + '=' + token + ';path=/;max-age=' + 15 * 60 + ';domain=.' + origin + ';secure;';
+        document.cookie = COOKIE_TOKEN_NAME + '=' + token + ';path=/;max-age=' + 15 * 60 + ';domain=.' + origin + ';secure;';
         broadcastUpdatedToken();
     }
 }
@@ -948,7 +964,7 @@ function setToken(token) {
 function removeToken() {
     log('[jwt.js] removing access token');
     lib.store.local.remove(TOKEN_NAME);
-    document.cookie = TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
+    document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
 }
 
 // init
@@ -1003,7 +1019,7 @@ function getToken(): IToken | IInternalToken {
  * @return {Object} the parsed JSON Web Token
  */
 function getStoredTokenValue(): string {
-    return lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(TOKEN_NAME);
+    return lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
 }
 
 /* Get a string containing the unparsed, base64-encoded JSON Web Token.
