@@ -183,9 +183,8 @@ const REFRESH_TOKEN_NAME_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_refresh_token`;
 const FAIL_COUNT_NAME_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_refresh_fail_count`;
 
 const INTERNAL_ROLE = 'redhat:employees';
-
 let TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${TOKEN_SURFIX}`;
-let COOKIE_TOKEN_NAME = TOKEN_NAME;
+let COOKIE_TOKEN_NAME = 'rh_jwt';
 let REFRESH_TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
 let FAIL_COUNT_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${FAIL_COUNT_NAME_SURFIX}`;
 
@@ -303,11 +302,9 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     // We don't need to change COOKIE_TOKEN_NAME as its domain specific and will not
     // conflict with other applications.
     TOKEN_NAME = `${options.clientId}${TOKEN_SURFIX}`;
-    COOKIE_TOKEN_NAME = TOKEN_NAME;
     REFRESH_TOKEN_NAME = `${options.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
     FAIL_COUNT_NAME = `${options.clientId}${FAIL_COUNT_NAME_SURFIX}`;
 
-    _migrate();
     token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
     refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
 
@@ -330,49 +327,6 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
         .init(jwtOptions.keycloakInitOptions ? Object.assign({}, DEFAULT_KEYCLOAK_INIT_OPTIONS, jwtOptions.keycloakInitOptions) : DEFAULT_KEYCLOAK_INIT_OPTIONS)
         .success(keycloakInitSuccess)
         .error(keycloakInitError);
-}
-
-
-/**
- * This function handles cases where session.js changes its data structre
- * in some way that would affect users who have existing an session,
- * cookies, or localStorage values.  It will change and expand as migration
- * needs arise.
- *
- * To add a new migration step, add a named function inside migrate, then
- * call it at the top.  Migration steps will be run every time session.js
- * initializes, so be sure migration steps have no side effects when run
- * multiple times.  Look within for examples.
- *
- * @memberof module:jwt
- * @private
- */
-function _migrate() {
-    // run migration steps
-
-    migrateToNamespacedLocalStorage();
-
-    // migration steps defined below
-
-    function migrateToNamespacedLocalStorage() {
-        // check for the old localStorage keys and if they exist, move them to the new, namespaced keys
-        let oldToken = lib.store.local.get('rh_jwt');
-        let oldRefreshToken = lib.store.local.get('rh_refresh_token');
-        CacheUtils.get<INumberCache>('refresh_fail_count').then((failCountCache) => {
-           CacheUtils.set<INumberCache, number>(FAIL_COUNT_NAME, {value: failCountCache.value});
-            CacheUtils.delete('refresh_fail_count');
-        }).catch((e) => {});
-
-        if (oldToken) {
-            lib.store.local.set(TOKEN_NAME, oldToken);
-            lib.store.local.remove('rh_jwt');
-        }
-
-        if (oldRefreshToken) {
-            lib.store.local.set(REFRESH_TOKEN_NAME, oldRefreshToken);
-            lib.store.local.remove('rh_refresh_token');
-        }
-    }
 }
 
 /**
