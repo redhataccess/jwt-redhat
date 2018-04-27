@@ -177,16 +177,21 @@ const DEFAULT_KEYCLOAK_OPTIONS: IKeycloakOptions = {
     clientId: 'changeme'
 };
 
+const JWT_REDHAT_IDENTIFIER = 'jwt_redhat';
+const TOKEN_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_token`;
+const REFRESH_TOKEN_NAME_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_refresh_token`;
+const FAIL_COUNT_NAME_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_refresh_fail_count`;
+
 const INTERNAL_ROLE = 'redhat:employees';
-const COOKIE_TOKEN_NAME = `rh_jwt`;
-const TOKEN_SURFIX = '_jwt';
-const REFRESH_TOKEN_NAME_SURFIX = '_refresh_token';
+
 let TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${TOKEN_SURFIX}`;
+let COOKIE_TOKEN_NAME = TOKEN_NAME;
 let REFRESH_TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
+let FAIL_COUNT_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${FAIL_COUNT_NAME_SURFIX}`;
+
 const TOKEN_EXP_TTE = 58; // Seconds to check forward if the token will expire
 const REFRESH_INTERVAL = 1 * TOKEN_EXP_TTE * 1000; // ms. check token for upcoming expiration every this many milliseconds
 const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this many seconds from now
-const FAIL_COUNT_NAME = 'refresh_fail_count';
 const FAIL_COUNT_THRESHOLD = 5; // how many times in a row token refresh can fail before we give up trying
 let userInfo: IJwtUser;  // To be used to set the user context in Raven
 let disablePolling = false;
@@ -298,7 +303,9 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     // We don't need to change COOKIE_TOKEN_NAME as its domain specific and will not
     // conflict with other applications.
     TOKEN_NAME = `${options.clientId}${TOKEN_SURFIX}`;
+    COOKIE_TOKEN_NAME = TOKEN_NAME;
     REFRESH_TOKEN_NAME = `${options.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
+    FAIL_COUNT_NAME = `${options.clientId}${FAIL_COUNT_NAME_SURFIX}`;
 
     token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
     refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
