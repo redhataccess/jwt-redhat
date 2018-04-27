@@ -1,5 +1,5 @@
-const Keycloak          = require('./keycloak');
-import { Keycloak }     from '../@types/keycloak';
+const Keycloak = require('./keycloak');
+import { Keycloak } from '../@types/keycloak';
 
 import {
     CacheUtils,
@@ -240,7 +240,7 @@ function log(message: string) {
                 console.log.apply(console, args);
             }
         });
-    } catch (e) {}
+    } catch (e) { }
 }
 
 function isLocalStorageAvailable() {
@@ -307,6 +307,7 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     REFRESH_TOKEN_NAME = `${options.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
     FAIL_COUNT_NAME = `${options.clientId}${FAIL_COUNT_NAME_SURFIX}`;
 
+    _migrate();
     token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
     refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
 
@@ -329,6 +330,49 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
         .init(jwtOptions.keycloakInitOptions ? Object.assign({}, DEFAULT_KEYCLOAK_INIT_OPTIONS, jwtOptions.keycloakInitOptions) : DEFAULT_KEYCLOAK_INIT_OPTIONS)
         .success(keycloakInitSuccess)
         .error(keycloakInitError);
+}
+
+
+/**
+ * This function handles cases where session.js changes its data structre
+ * in some way that would affect users who have existing an session,
+ * cookies, or localStorage values.  It will change and expand as migration
+ * needs arise.
+ *
+ * To add a new migration step, add a named function inside migrate, then
+ * call it at the top.  Migration steps will be run every time session.js
+ * initializes, so be sure migration steps have no side effects when run
+ * multiple times.  Look within for examples.
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function _migrate() {
+    // run migration steps
+
+    migrateToNamespacedLocalStorage();
+
+    // migration steps defined below
+
+    function migrateToNamespacedLocalStorage() {
+        // check for the old localStorage keys and if they exist, move them to the new, namespaced keys
+        let oldToken = lib.store.local.get('rh_jwt');
+        let oldRefreshToken = lib.store.local.get('rh_refresh_token');
+        CacheUtils.get<INumberCache>('refresh_fail_count').then((failCountCache) => {
+           CacheUtils.set<INumberCache, number>(FAIL_COUNT_NAME, {value: failCountCache.value});
+            CacheUtils.delete('refresh_fail_count');
+        }).catch((e) => {});
+
+        if (oldToken) {
+            lib.store.local.set(TOKEN_NAME, oldToken);
+            lib.store.local.remove('rh_jwt');
+        }
+
+        if (oldRefreshToken) {
+            lib.store.local.set(REFRESH_TOKEN_NAME, oldRefreshToken);
+            lib.store.local.remove('rh_refresh_token');
+        }
+    }
 }
 
 /**
@@ -656,7 +700,7 @@ function ssoUrl(isInternal?: boolean) {
         default:
             log('[jwt.js] ENV: ci');
             return `https://${subDomain}.dev2.redhat.com/auth`;
-        }
+    }
 }
 
 /**
@@ -1243,7 +1287,7 @@ function sendToSentry(error: Error, extra: Object) {
             // TODO -- if ever upgrading keycloak to upstream see https://github.com/keycloak/keycloak/pull/5008 to ensure this error message stays inline
             state_changed: extra && (extra as Error).message && (extra as Error).message.toLowerCase().indexOf('Cookie sessionId and keycloak sessionId do not match') !== -1
         });
-        Raven.captureException(error, {extra: extra});
+        Raven.captureException(error, { extra: extra });
     }
 }
 
