@@ -184,7 +184,7 @@ const FAIL_COUNT_NAME_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_refresh_fail_count`;
 
 const INTERNAL_ROLE = 'redhat:employees';
 let TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${TOKEN_SURFIX}`;
-let COOKIE_TOKEN_NAME = 'rh_jwt';
+let COOKIE_TOKEN_NAME = TOKEN_NAME;
 let REFRESH_TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
 let FAIL_COUNT_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${FAIL_COUNT_NAME_SURFIX}`;
 
@@ -302,6 +302,7 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     // We don't need to change COOKIE_TOKEN_NAME as its domain specific and will not
     // conflict with other applications.
     TOKEN_NAME = `${options.clientId}${TOKEN_SURFIX}`;
+    COOKIE_TOKEN_NAME = TOKEN_NAME;
     REFRESH_TOKEN_NAME = `${options.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
     FAIL_COUNT_NAME = `${options.clientId}${FAIL_COUNT_NAME_SURFIX}`;
 
