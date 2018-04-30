@@ -204,7 +204,7 @@ const DEFAULT_KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
     refreshToken: null
 };
 
-const origin = location.hostname;
+// const origin = location.hostname;
 // const originWithPort = location.hostname + (location.port ? ':' + location.port : '');
 
 let token = null;
