@@ -59,8 +59,8 @@ export interface IToken {
     aud: string; // "customer-portal"
     auth_time: number; //1501857720
     azp: string; // "customer-portal"
-    client_session: string; 
-    country: string; // "US"; 
+    client_session: string;
+    country: string; // "US";
     email: string; // "<name>+qa@redhat.com<200b>"
     employeeId: string; // "rhn-support-<name>"
     exp: number; // 1501873015
@@ -74,11 +74,11 @@ export interface IToken {
     nonce: string;
     organization_id: string;
     portal_id: string;
-    realm_access: {roles: string[]};
+    realm_access: { roles: string[] };
     region: string; // "US"
     resource_access: {
         'realm-management': {
-            'roles': string[]; // ["impersonation", "view-users"]                
+            'roles': string[]; // ["impersonation", "view-users"]
         }
     };
     session_state: string;
@@ -123,16 +123,16 @@ export interface ITokenUpdateFailure {
     expiresIn: number;
 }
 
-export interface RealmAccess {
+export interface IRealmAccess {
     roles: string[];
 }
 
-export interface Account {
+export interface IAccount {
     roles: string[];
 }
 
-export interface ResourceAccess {
-    account: Account;
+export interface IResourceAccess {
+    account: IAccount;
 }
 
 export interface IInternalToken {
@@ -149,10 +149,15 @@ export interface IInternalToken {
     auth_time: number;
     session_state: string;
     acr: string;
-    client_session: string;
+    client_session?: string;
     'allowed-origins': string[];
-    realm_access: RealmAccess;
-    resource_access: ResourceAccess;
+    realm_access: IRealmAccess;
+    resource_access: IResourceAccess;
+    employeeType?: string;
+    rhatGeo?: string;
+    rhatJobTitle?: string;
+    preferredTimeZone?: string;
+    rhatUUID?: string;
     name: string;
     preferred_username: string;
     given_name: string;
