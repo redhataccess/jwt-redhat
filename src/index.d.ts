@@ -15,7 +15,7 @@ import {
 
 declare namespace Jwt {
     export function isAuthenticated(): boolean;
-    export function login(options?: ILoginOptions): void;
+    export function login(options?: ILoginOptions): Keycloak.KeycloakPromise<void, void>;
     export function logout(options?: ILoginOptions): void;
     export function register(options: any): void;
     export function hasRole(...roles: string[]): boolean;
@@ -47,6 +47,7 @@ declare namespace Jwt {
     export function failCountPassed(): Promise<boolean>;
     export function getFailCount(): Promise<INumberCache>;
     export function expiresIn(): number;
+    export function reinit();
 }
 
 export default Jwt;
