@@ -184,6 +184,8 @@ const FAIL_COUNT_NAME_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_refresh_fail_count`;
 
 const INTERNAL_ROLE = 'redhat:employees';
 let TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${TOKEN_SURFIX}`;
+let INITIALIZE_CONFIRGUATION: IJwtOptions = undefined;
+let COOKIE_TOKEN_NAME = TOKEN_NAME;
 let REFRESH_TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
 let FAIL_COUNT_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${FAIL_COUNT_NAME_SURFIX}`;
 
@@ -204,7 +206,7 @@ const DEFAULT_KEYCLOAK_INIT_OPTIONS: Keycloak.KeycloakInitOptions = {
     refreshToken: null
 };
 
-// const origin = location.hostname;
+const origin = location.hostname;
 // const originWithPort = location.hostname + (location.port ? ':' + location.port : '');
 
 let token = null;
@@ -219,11 +221,14 @@ const events = {
     init: [],
     token: [],
     tokenMismatch: [],
+    jwtTokenMismatchFailed: [],
     refreshError: [],
     refreshSuccess: [],
     logout: [],
     tokenExpired: []
 };
+
+document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
 
 /**
  * Log session-related messages to the console, in pre-prod environments.
@@ -280,6 +285,18 @@ if (tokenUpdateScheduler) {
 
 // Keep track of the setInterval for the refresh token so we can cancel it and restart it if need be
 let refreshIntervalId;
+/**
+ * Kicks off all the session-related things again.
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function reinit() {
+    if (!INITIALIZE_CONFIRGUATION) {
+        return;
+    }
+    init(INITIALIZE_CONFIRGUATION);
+}
 
 /**
  * Kicks off all the session-related things.
@@ -290,6 +307,7 @@ let refreshIntervalId;
 function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError> {
     log('[jwt.js] initializing');
 
+    INITIALIZE_CONFIRGUATION = jwtOptions;
     const options = jwtOptions.keycloakOptions ? Object.assign({}, DEFAULT_KEYCLOAK_OPTIONS, jwtOptions.keycloakOptions) : DEFAULT_KEYCLOAK_OPTIONS;
     options.url = !options.url ? ssoUrl(options.internalAuth) : options.url;
     disablePolling = jwtOptions.disablePolling;
@@ -299,10 +317,11 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     // We don't need to change COOKIE_TOKEN_NAME as its domain specific and will not
     // conflict with other applications.
     TOKEN_NAME = `${options.clientId}${TOKEN_SURFIX}`;
+    COOKIE_TOKEN_NAME = TOKEN_NAME;
     REFRESH_TOKEN_NAME = `${options.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
     FAIL_COUNT_NAME = `${options.clientId}${FAIL_COUNT_NAME_SURFIX}`;
 
-    token = lib.store.local.get(TOKEN_NAME);
+    token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
     refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
 
     if (token && token !== 'undefined') { DEFAULT_KEYCLOAK_INIT_OPTIONS.token = token; }
@@ -457,6 +476,21 @@ function handleTokenMismatchEvents() {
 }
 
 /**
+ * Call any token mismatch event handlers that have are registered.  One time call then removed.
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function handleJwtTokenMismatchFailedEvents() {
+    while (events.jwtTokenMismatchFailed.length) {
+        const event = events.jwtTokenMismatchFailed.shift();
+        if (typeof event === 'function') {
+            event(Jwt);
+        }
+    }
+}
+
+/**
  * Register a function to be called when jwt.js has initialized.  Runs
  * immediately if already initialized.  When called, the function will be
  * passed a reference to the jwt.js API.
@@ -502,6 +536,21 @@ function onTokenMismatch(func: Function) {
         func(Jwt);
     } else {
         events.tokenMismatch.push(func);
+    }
+}
+
+/**
+ * Register a function to be called when the tokens mismatch.  This is a hard
+ * error caused when mixing sso envs/tokens and requires a logout/log back in
+ * @memberof module:jwt
+ */
+function onJwtTokenMisMatchFailed(func: Function) {
+    log(`[jwt.js] registering the onJwtTokenMisMatchFailed handler`);
+    if (state.initialized) {
+        log(`[jwt.js] running event handler: onJwtTokenMisMatchFailed`);
+        func(Jwt);
+    } else {
+        events.jwtTokenMismatchFailed.push(func);
     }
 }
 
@@ -857,6 +906,7 @@ function refreshLoop(): Promise<boolean> {
         if (e && e.message && e.message.indexOf('not match') !== -1) {
             handleTokenMismatchEvents();
         }
+        handleJwtTokenMismatchFailedEvents();
         return false;
     });
 }
@@ -900,6 +950,7 @@ function updateTokenFailure(e: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
     incFailCount();
     sendToSentry(new Error('Update token failure'), e);
+    handleJwtTokenMismatchFailedEvents();
 }
 
 /**
@@ -952,6 +1003,7 @@ function setToken(token) {
         // it's been expired for a long time.
         log('[jwt.js] setting access token');
         lib.store.local.set(TOKEN_NAME, token);
+        document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
         broadcastUpdatedToken();
     }
 }
@@ -1019,7 +1071,7 @@ function getToken(): IToken | IInternalToken {
  * @return {Object} the parsed JSON Web Token
  */
 function getStoredTokenValue(): string {
-    return lib.store.local.get(TOKEN_NAME);
+    return lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
 }
 
 /* Get a string containing the unparsed, base64-encoded JSON Web Token.
@@ -1167,10 +1219,10 @@ function initialized(func) {
  * @memberof module:jwt
  * @param {Object} options See [options](https://keycloak.gitbooks.io/securing-client-applications-guide/content/v/2.2/topics/oidc/javascript-adapter.html#_login_options) for valid options.
  */
-function login(options: ILoginOptions = {}): void {
+function login(options: ILoginOptions = {}): Keycloak.KeycloakPromise<void, void> {
     const redirectUri = options.redirectUri || location.href;
     options.redirectUri = redirectUri;
-    state.keycloak.login(options);
+    return state.keycloak.login(options);
 }
 
 /**
@@ -1320,11 +1372,13 @@ const Jwt = {
     onTokenExpired: onTokenExpired,
     onInitialUpdateToken: onInitialUpdateToken,
     onTokenMismatch: onTokenMismatch,
+    onJwtTokenMisMatchFailed: onJwtTokenMisMatchFailed,
     onAuthError: onAuthError,
     enableDebugLogging: enableDebugLogging,
     disableDebugLogging: disableDebugLogging,
     isMaster: isMaster,
     init: init,
+    reinit: reinit,
     _state: state,
     getFailCount: getFailCount,
     failCountPassed: failCountPassed,
