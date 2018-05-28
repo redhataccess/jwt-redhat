@@ -295,7 +295,12 @@ function reinit() {
     if (!INITIALIZE_CONFIRGUATION) {
         return;
     }
-    init(INITIALIZE_CONFIRGUATION);
+    resetFailCount().then(() => {
+        init(INITIALIZE_CONFIRGUATION);
+    }).catch(() => {
+        log('[jwt.js] unable to reset the fail count in reinit');
+        startRefreshLoop();
+    });
 }
 
 /**
@@ -732,6 +737,8 @@ function onAuthRefreshErrorCallback() {
 function onAuthLogoutCallback() {
     log('[jwt.js] onAuthLogout');
     keycloakLogoutHandler();
+    // skip redirect if user is logout from other tabs.
+    logout({ skipRedirect: true });
 }
 
 /**
@@ -1003,7 +1010,7 @@ function setToken(token) {
         // it's been expired for a long time.
         log('[jwt.js] setting access token');
         lib.store.local.set(TOKEN_NAME, token);
-        document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
+        document.cookie = COOKIE_TOKEN_NAME + '=' + token + ';path=/;max-age=' + 15 * 60 + ';domain=.' + origin + ';secure;';
         broadcastUpdatedToken();
     }
 }
@@ -1017,6 +1024,7 @@ function setToken(token) {
 function removeToken() {
     log('[jwt.js] removing access token');
     lib.store.local.remove(TOKEN_NAME);
+    document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
 }
 
 // init
@@ -1232,7 +1240,10 @@ function login(options: ILoginOptions = {}): Keycloak.KeycloakPromise<void, void
 function logout(options: ILoginOptions = {}): void {
     removeToken();
     removeRefreshToken();
-    state.keycloak.logout(options);
+    resetFailCount();
+    if (!options.skipRedirect) {
+        state.keycloak.logout(options);
+    }
 }
 
 /**

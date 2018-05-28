@@ -32,6 +32,7 @@ export interface IJwtOptions {
 
 export interface ILoginOptions {
     redirectUri?: string;
+    skipRedirect?: boolean;
 }
 
 export interface IJwtUser {
