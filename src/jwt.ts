@@ -964,7 +964,10 @@ function updateTokenSuccess(refreshed: boolean) {
  */
 function updateTokenFailure(e: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
-    const userLoginTime = (+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60;
+    let userLoginTime = undefined;
+    if (initialUserToken) {
+        userLoginTime = (+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60;
+    }
     failCountPassed(FAIL_COUNT_NAME, 4).then((isFailCountPassed) => {
         if (isFailCountPassed) {
             if (!getToken()) {
@@ -974,7 +977,7 @@ function updateTokenFailure(e: ITokenUpdateFailure) {
         }
         incKeyCount(FAIL_COUNT_NAME);
     });
-    if (initialUserToken) {
+    if (userLoginTime) {
         const isUserSessionInGivenTime = userLoginTime < tokenExpiryTime;
         if (isUserSessionInGivenTime) {
             failCountPassed(SESSION_COUNT_BEFORE_KEY, 1).then((isFailCountPassed) => {
