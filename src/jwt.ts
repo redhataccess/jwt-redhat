@@ -200,6 +200,7 @@ const FAIL_COUNT_THRESHOLD = 5; // how many times in a row token refresh can fai
 let userInfo: IJwtUser;  // To be used to set the user context in Raven
 let disablePolling = false;
 let tokenExpiryTime = 14;
+let initialUserToken = null;
 
 // This is explicitly to track when the first successfull updateToken happens.
 let timeSkew = null;
@@ -319,6 +320,7 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     options.url = !options.url ? ssoUrl(options.internalAuth) : options.url;
     disablePolling = jwtOptions.disablePolling;
     tokenExpiryTime = jwtOptions.tokenExpiryTime ? jwtOptions.tokenExpiryTime : 14;
+    initialUserToken = null;
 
     // Token names are now namespaced by clientId, thus moving the token_name evaluation
     // and token initialization into the init function where we get the actual clientId
@@ -366,6 +368,7 @@ function keycloakInitSuccess(authenticated: boolean) {
     if (authenticated) {
         setToken(state.keycloak.token);
         setRefreshToken(state.keycloak.refreshToken);
+        initialUserToken = getToken();
         resetSessionKeyCount();
         resetKeyCount(FAIL_COUNT_NAME).then(() => {
             startRefreshLoop();
@@ -961,29 +964,29 @@ function updateTokenSuccess(refreshed: boolean) {
  */
 function updateTokenFailure(e: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
+    const userLoginTime = (+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60;
     failCountPassed(FAIL_COUNT_NAME, 4).then((isFailCountPassed) => {
         if (isFailCountPassed) {
             if (!getToken()) {
-                sendToSentry(new Error(`Update token failure: getToken() is undefined after ${FAIL_COUNT_THRESHOLD} attempts`), e);
+                sendToSentry(new Error(`[jwt.js] Update token failure: getToken() is undefined after ${userLoginTime} hours`), e);
             }
-            sendToSentry(new Error(`Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts`), e);
+            sendToSentry(new Error(`[jwt.js] Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts`), e);
         }
         incKeyCount(FAIL_COUNT_NAME);
     });
-    if (getToken()) {
-        const userLoginTime = (+new Date() - getToken().auth_time * 1000) / 1000 / 60 / 60;
+    if (initialUserToken) {
         const isUserSessionInGivenTime = userLoginTime < tokenExpiryTime;
         if (isUserSessionInGivenTime) {
-            failCountPassed(SESSION_COUNT_BEFORE_KEY, 2).then((isFailCountPassed) => {
+            failCountPassed(SESSION_COUNT_BEFORE_KEY, 1).then((isFailCountPassed) => {
                 if (!isFailCountPassed) {
-                    sendToSentry(new Error(`Update token failure: before ${tokenExpiryTime} hours, login duration ${userLoginTime}`), e);
+                    sendToSentry(new Error(`[jwt.js] Update token failure: before ${tokenExpiryTime} hours, login duration ${userLoginTime} hours`), e);
                     incKeyCount(SESSION_COUNT_BEFORE_KEY);
                 }
             });
         } else {
-            failCountPassed(SESSION_COUNT_AFTER_KEY, 2).then((isFailCountPassed) => {
+            failCountPassed(SESSION_COUNT_AFTER_KEY, 1).then((isFailCountPassed) => {
                 if (!isFailCountPassed) {
-                    sendToSentry(new Error(`Update token failure: after ${tokenExpiryTime} hours, login duration ${userLoginTime}`), e);
+                    sendToSentry(new Error(`[jwt.js] Update token failure: after ${tokenExpiryTime} hours, login duration ${userLoginTime} hours`), e);
                     incKeyCount(SESSION_COUNT_AFTER_KEY);
                 }
             });
