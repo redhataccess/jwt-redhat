@@ -181,6 +181,8 @@ const JWT_REDHAT_IDENTIFIER = 'jwt_redhat';
 const TOKEN_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_token`;
 const REFRESH_TOKEN_NAME_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_refresh_token`;
 const FAIL_COUNT_NAME_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_refresh_fail_count`;
+const SESSION_COUNT_SURFIX_BEFORE = `_${JWT_REDHAT_IDENTIFIER}_session_expire_count_before`;
+const SESSION_COUNT_SURFIX_AFTER = `_${JWT_REDHAT_IDENTIFIER}_session_expire_count_after`;
 
 const INTERNAL_ROLE = 'redhat:employees';
 let TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${TOKEN_SURFIX}`;
@@ -188,6 +190,8 @@ let INITIALIZE_CONFIRGUATION: IJwtOptions = undefined;
 let COOKIE_TOKEN_NAME = TOKEN_NAME;
 let REFRESH_TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
 let FAIL_COUNT_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${FAIL_COUNT_NAME_SURFIX}`;
+let SESSION_COUNT_BEFORE_KEY = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${SESSION_COUNT_SURFIX_BEFORE}`;
+let SESSION_COUNT_AFTER_KEY = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${SESSION_COUNT_SURFIX_AFTER}`;
 
 const TOKEN_EXP_TTE = 58; // Seconds to check forward if the token will expire
 const REFRESH_INTERVAL = 1 * TOKEN_EXP_TTE * 1000; // ms. check token for upcoming expiration every this many milliseconds
@@ -195,6 +199,8 @@ const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this m
 const FAIL_COUNT_THRESHOLD = 5; // how many times in a row token refresh can fail before we give up trying
 let userInfo: IJwtUser;  // To be used to set the user context in Raven
 let disablePolling = false;
+let tokenExpiryTime = 14;
+let initialUserToken = null;
 
 // This is explicitly to track when the first successfull updateToken happens.
 let timeSkew = null;
@@ -221,7 +227,7 @@ const events = {
     init: [],
     token: [],
     tokenMismatch: [],
-    jwtTokenMismatchFailed: [],
+    jwtTokenUpdateFailed: [],
     refreshError: [],
     refreshSuccess: [],
     logout: [],
@@ -295,6 +301,8 @@ function reinit() {
     if (!INITIALIZE_CONFIRGUATION) {
         return;
     }
+    resetSessionKeyCount();
+    resetKeyCount(FAIL_COUNT_NAME);
     init(INITIALIZE_CONFIRGUATION);
 }
 
@@ -311,6 +319,8 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     const options = jwtOptions.keycloakOptions ? Object.assign({}, DEFAULT_KEYCLOAK_OPTIONS, jwtOptions.keycloakOptions) : DEFAULT_KEYCLOAK_OPTIONS;
     options.url = !options.url ? ssoUrl(options.internalAuth) : options.url;
     disablePolling = jwtOptions.disablePolling;
+    tokenExpiryTime = jwtOptions.tokenExpiryTime ? jwtOptions.tokenExpiryTime : 14;
+    initialUserToken = null;
 
     // Token names are now namespaced by clientId, thus moving the token_name evaluation
     // and token initialization into the init function where we get the actual clientId
@@ -320,6 +330,8 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     COOKIE_TOKEN_NAME = TOKEN_NAME;
     REFRESH_TOKEN_NAME = `${options.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
     FAIL_COUNT_NAME = `${options.clientId}${FAIL_COUNT_NAME_SURFIX}`;
+    SESSION_COUNT_BEFORE_KEY = `${options.clientId}${SESSION_COUNT_SURFIX_BEFORE}`;
+    SESSION_COUNT_AFTER_KEY = `${options.clientId}${SESSION_COUNT_SURFIX_AFTER}`;
 
     token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
     refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
@@ -356,7 +368,9 @@ function keycloakInitSuccess(authenticated: boolean) {
     if (authenticated) {
         setToken(state.keycloak.token);
         setRefreshToken(state.keycloak.refreshToken);
-        resetFailCount().then(() => {
+        initialUserToken = getToken();
+        resetSessionKeyCount();
+        resetKeyCount(FAIL_COUNT_NAME).then(() => {
             startRefreshLoop();
         }).catch(() => {
             log('[jwt.js] unable to reset the fail count');
@@ -481,9 +495,9 @@ function handleTokenMismatchEvents() {
  * @memberof module:jwt
  * @private
  */
-function handleJwtTokenMismatchFailedEvents() {
-    while (events.jwtTokenMismatchFailed.length) {
-        const event = events.jwtTokenMismatchFailed.shift();
+function handleJwtTokenUpdateFailedEvents() {
+    while (events.jwtTokenUpdateFailed.length) {
+        const event = events.jwtTokenUpdateFailed.shift();
         if (typeof event === 'function') {
             event(Jwt);
         }
@@ -550,7 +564,7 @@ function onJwtTokenMisMatchFailed(func: Function) {
         log(`[jwt.js] running event handler: onJwtTokenMisMatchFailed`);
         func(Jwt);
     } else {
-        events.jwtTokenMismatchFailed.push(func);
+        events.jwtTokenUpdateFailed.push(func);
     }
 }
 
@@ -732,6 +746,8 @@ function onAuthRefreshErrorCallback() {
 function onAuthLogoutCallback() {
     log('[jwt.js] onAuthLogout');
     keycloakLogoutHandler();
+    // skip redirect if user is logs out from other tabs.
+    logout({ skipRedirect: true });
 }
 
 /**
@@ -811,7 +827,7 @@ function isTokenExpired(tte: number = REFRESH_TTE): boolean {
  * @private
  */
 async function updateToken(force: boolean = false): Promise<boolean> {
-    const isFailCountPassed = await failCountPassed();
+    const isFailCountPassed = await failCountPassed(FAIL_COUNT_NAME, FAIL_COUNT_THRESHOLD);
     return new Promise<boolean>((resolve, reject) => {
         try {
             if (isFailCountPassed && force !== true) {
@@ -906,7 +922,6 @@ function refreshLoop(): Promise<boolean> {
         if (e && e.message && e.message.indexOf('not match') !== -1) {
             handleTokenMismatchEvents();
         }
-        handleJwtTokenMismatchFailedEvents();
         return false;
     });
 }
@@ -920,7 +935,8 @@ function refreshLoop(): Promise<boolean> {
 function updateTokenSuccess(refreshed: boolean) {
     log('[jwt.js] updateTokenSuccess, token was ' + ['not ', ''][~~refreshed] + 'refreshed');
     if (refreshed) {
-        resetFailCount(); // token update worked, so reset number of consecutive failures
+        resetKeyCount(FAIL_COUNT_NAME); // token update worked, so reset number of consecutive failures
+        resetSessionKeyCount();
     }
 
     setToken(state.keycloak.token);
@@ -948,9 +964,38 @@ function updateTokenSuccess(refreshed: boolean) {
  */
 function updateTokenFailure(e: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
-    incFailCount();
-    sendToSentry(new Error('Update token failure'), e);
-    handleJwtTokenMismatchFailedEvents();
+    let userLoginTime = undefined;
+    if (initialUserToken) {
+        userLoginTime = (+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60;
+    }
+    failCountPassed(FAIL_COUNT_NAME, 4).then((isFailCountPassed) => {
+        if (isFailCountPassed) {
+            if (!getToken()) {
+                sendToSentry(new Error(`[jwt.js] Update token failure: getToken() is undefined after ${userLoginTime} hours`), e);
+            }
+            sendToSentry(new Error(`[jwt.js] Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts`), e);
+        }
+        incKeyCount(FAIL_COUNT_NAME);
+    });
+    if (userLoginTime) {
+        const isUserSessionInGivenTime = userLoginTime < tokenExpiryTime;
+        if (isUserSessionInGivenTime) {
+            failCountPassed(SESSION_COUNT_BEFORE_KEY, 1).then((isFailCountPassed) => {
+                if (!isFailCountPassed) {
+                    sendToSentry(new Error(`[jwt.js] Update token failure: before ${tokenExpiryTime} hours, login duration ${userLoginTime} hours`), e);
+                    incKeyCount(SESSION_COUNT_BEFORE_KEY);
+                }
+            });
+        } else {
+            failCountPassed(SESSION_COUNT_AFTER_KEY, 1).then((isFailCountPassed) => {
+                if (!isFailCountPassed) {
+                    sendToSentry(new Error(`[jwt.js] Update token failure: after ${tokenExpiryTime} hours, login duration ${userLoginTime} hours`), e);
+                    incKeyCount(SESSION_COUNT_AFTER_KEY);
+                }
+            });
+        }
+    }
+    handleJwtTokenUpdateFailedEvents();
 }
 
 /**
@@ -1003,7 +1048,7 @@ function setToken(token) {
         // it's been expired for a long time.
         log('[jwt.js] setting access token');
         lib.store.local.set(TOKEN_NAME, token);
-        document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
+        document.cookie = COOKIE_TOKEN_NAME + '=' + token + ';path=/;max-age=' + 15 * 60 + ';domain=.' + origin + ';secure;';
         broadcastUpdatedToken();
     }
 }
@@ -1017,6 +1062,7 @@ function setToken(token) {
 function removeToken() {
     log('[jwt.js] removing access token');
     lib.store.local.remove(TOKEN_NAME);
+    document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
 }
 
 // init
@@ -1232,7 +1278,11 @@ function login(options: ILoginOptions = {}): Keycloak.KeycloakPromise<void, void
 function logout(options: ILoginOptions = {}): void {
     removeToken();
     removeRefreshToken();
-    state.keycloak.logout(options);
+    resetKeyCount(FAIL_COUNT_NAME);
+    resetSessionKeyCount();
+    if (!options.skipRedirect) {
+        state.keycloak.logout(options);
+    }
 }
 
 /**
@@ -1293,14 +1343,14 @@ function sendToSentry(error: Error, extra: Object) {
 }
 
 /**
-  * Get the number of times in a row that token refresh has failed.
-  * @return {Number} the number of times that token refresh has failed
+  * Get the count of the $key.
+  * @return {Number} Get the count of the $key.
   * @memberof module:jwt
   */
-function getFailCount(): Promise<number> {
+  function getCountForKey(key: string): Promise<number> {
     try {
-        return CacheUtils.get<INumberCache>(FAIL_COUNT_NAME).then((failCountCache) => {
-            return failCountCache.value;
+        return CacheUtils.get<INumberCache>(key).then((countCache) => {
+            return countCache.value;
         }).catch((e) => {
             return 0;
         });
@@ -1315,35 +1365,41 @@ function getFailCount(): Promise<number> {
  * @memberof module:jwt
  * @return {Boolean} has the consecutive failure count been exceeded
  */
-function failCountPassed(): Promise<boolean> {
-    return getFailCount().then((count) => {
-        return count > FAIL_COUNT_THRESHOLD;
+function failCountPassed(key: string, threshold: number): Promise<boolean> {
+    return getCountForKey(key).then((count) => {
+        return count > threshold;
     });
 }
 
+
 /**
- * Increment the number of times in a row that token refresh has failed.
- * @return {Number} the new, incremented number of times that token refresh has failed
+ * Increment the value of the $key.
+ * @return {Number} Increment the value of the $key and return new key count.
  */
-function incFailCount(): Promise<number> {
-    return getFailCount().then((failCount) => {
-        const newFailCount = failCount + 1;
+function incKeyCount(key: string): Promise<number> {
+    return getCountForKey(key).then((keyCount) => {
+        const newKeyCount = keyCount + 1;
         const newFailCountCache: INumberCache = {
-            value: newFailCount
+            value: newKeyCount
         };
-        CacheUtils.set<INumberCache, number>(FAIL_COUNT_NAME, newFailCountCache);
-        return newFailCount;
+        CacheUtils.set<INumberCache, number>(key, newFailCountCache);
+        return newKeyCount;
     });
 }
 
 /**
- * Reset the number of times in a row that token refresh has failed.
+ * Reset the value of $key to zero.
  */
-function resetFailCount(): Promise<INumberCache> {
-    const newFailCountCache: INumberCache = {
+function resetKeyCount(key: string): Promise<INumberCache> {
+    const newSentryLogCountCache: INumberCache = {
         value: 0
     };
-    return CacheUtils.set<INumberCache, number>(FAIL_COUNT_NAME, newFailCountCache);
+    return CacheUtils.set<INumberCache, number>(key, newSentryLogCountCache);
+}
+
+function resetSessionKeyCount() {
+    resetKeyCount(SESSION_COUNT_BEFORE_KEY);
+    resetKeyCount(SESSION_COUNT_AFTER_KEY);
 }
 
 const Jwt = {
@@ -1380,7 +1436,7 @@ const Jwt = {
     init: init,
     reinit: reinit,
     _state: state,
-    getFailCount: getFailCount,
+    getCountForKey: getCountForKey,
     failCountPassed: failCountPassed,
     expiresIn: expiresIn
 };

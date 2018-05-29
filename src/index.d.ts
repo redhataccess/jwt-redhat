@@ -44,8 +44,8 @@ declare namespace Jwt {
     export function enableDebugLogging();
     export function disableDebugLogging();
     export const _state: IState;
-    export function failCountPassed(): Promise<boolean>;
-    export function getFailCount(): Promise<INumberCache>;
+    export function failCountPassed(key: string, threshold: number): Promise<boolean>;
+    export function getCountForKey(key: string): Promise<INumberCache>;
     export function expiresIn(): number;
     export function reinit();
 }

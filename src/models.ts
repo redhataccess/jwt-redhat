@@ -27,11 +27,13 @@ export interface IJwtOptions {
     // It would now be the responsibility of the parent
     // app to do this.
     disablePolling?: boolean;
+    tokenExpiryTime?: number;
 }
 
 
 export interface ILoginOptions {
     redirectUri?: string;
+    skipRedirect?: boolean;
 }
 
 export interface IJwtUser {
