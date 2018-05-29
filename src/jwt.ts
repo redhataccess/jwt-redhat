@@ -743,7 +743,7 @@ function onAuthRefreshErrorCallback() {
 function onAuthLogoutCallback() {
     log('[jwt.js] onAuthLogout');
     keycloakLogoutHandler();
-    // skip redirect if user is logout from other tabs.
+    // skip redirect if user is logs out from other tabs.
     logout({ skipRedirect: true });
 }
 
@@ -959,7 +959,7 @@ function updateTokenSuccess(refreshed: boolean) {
  * @memberof module:jwt
  * @private
  */
-async function updateTokenFailure(e: ITokenUpdateFailure) {
+function updateTokenFailure(e: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
     failCountPassed(FAIL_COUNT_NAME, FAIL_COUNT_THRESHOLD).then((isFailCountPassed) => {
         if (isFailCountPassed) {
@@ -972,18 +972,19 @@ async function updateTokenFailure(e: ITokenUpdateFailure) {
         }
     });
     if (getToken()) {
-        const isUserSessionInGivenTime = (+new Date() - getToken().auth_time * 1000) / 1000 / 60 / 60 < tokenExpiryTime;
+        const userLoginTime = (+new Date() - getToken().auth_time * 1000) / 1000 / 60 / 60;
+        const isUserSessionInGivenTime = userLoginTime < tokenExpiryTime;
         if (isUserSessionInGivenTime) {
             failCountPassed(SESSION_COUNT_BEFORE_KEY, 2).then((isFailCountPassed) => {
                 if (!isFailCountPassed) {
-                    sendToSentry(new Error(`Update token failure: before ${tokenExpiryTime} hours`), e);
+                    sendToSentry(new Error(`Update token failure: before ${tokenExpiryTime} hours, login duration ${userLoginTime}`), e);
                     incKeyCount(SESSION_COUNT_BEFORE_KEY);
                 }
             });
         } else {
             failCountPassed(SESSION_COUNT_AFTER_KEY, 2).then((isFailCountPassed) => {
                 if (!isFailCountPassed) {
-                    sendToSentry(new Error(`Update token failure: after ${tokenExpiryTime} hours`), e);
+                    sendToSentry(new Error(`Update token failure: after ${tokenExpiryTime} hours, login duration ${userLoginTime}`), e);
                     incKeyCount(SESSION_COUNT_AFTER_KEY);
                 }
             });
