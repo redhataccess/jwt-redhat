@@ -961,15 +961,14 @@ function updateTokenSuccess(refreshed: boolean) {
  */
 function updateTokenFailure(e: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
-    failCountPassed(FAIL_COUNT_NAME, FAIL_COUNT_THRESHOLD).then((isFailCountPassed) => {
+    failCountPassed(FAIL_COUNT_NAME, 4).then((isFailCountPassed) => {
         if (isFailCountPassed) {
             if (!getToken()) {
-                sendToSentry(new Error(`Update token failure: getToken() is undefined after ${FAIL_COUNT_THRESHOLD} attempts `), e);
+                sendToSentry(new Error(`Update token failure: getToken() is undefined after ${FAIL_COUNT_THRESHOLD} attempts`), e);
             }
             sendToSentry(new Error(`Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts`), e);
-        } else {
-            incKeyCount(FAIL_COUNT_NAME);
         }
+        incKeyCount(FAIL_COUNT_NAME);
     });
     if (getToken()) {
         const userLoginTime = (+new Date() - getToken().auth_time * 1000) / 1000 / 60 / 60;
