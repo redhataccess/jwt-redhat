@@ -36,6 +36,7 @@ declare namespace Jwt {
     export function onAuthRefreshError(func: Function): void;
     export function onAuthRefreshSuccess(func: Function): void;
     export function onAuthLogout(func: Function): void;
+    export function onAuthSuccess(func: Function): void;
     export function onTokenExpired(func: Function): void;
     export function onInitialUpdateToken(func: Function): void;
     export function onTokenMismatch(func: Function): void;
