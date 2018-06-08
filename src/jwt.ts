@@ -220,7 +220,7 @@ const lib = {
         today.setTime(today.getTime());
 
         /*
-        if the expires letiable is set, make the correct
+        if the expires variable is set, make the correct
         expires time, the current script below will set
         it for x number of days, to make it for hours,
         delete * 24, for minutes, delete * 60 * 24
