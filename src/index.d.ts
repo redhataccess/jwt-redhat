@@ -33,10 +33,10 @@ declare namespace Jwt {
     export function startRefreshLoop(): ISimplePromise;
     export function isTokenExpired(tte?: number);
     export function onInit(func: Function): void;
+    export function onInitError(func: Function): void;
     export function onAuthRefreshError(func: Function): void;
     export function onAuthRefreshSuccess(func: Function): void;
     export function onAuthLogout(func: Function): void;
-    export function onAuthSuccess(func: Function): void;
     export function onTokenExpired(func: Function): void;
     export function onInitialUpdateToken(func: Function): void;
     export function onTokenMismatch(func: Function): void;

@@ -310,7 +310,7 @@ const events = {
     refreshSuccess: [],
     logout: [],
     tokenExpired: [],
-    authSuccess: []
+    initError: []
 };
 
 document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
@@ -377,6 +377,7 @@ let refreshIntervalId;
  * @private
  */
 function reinit() {
+    log('[jwt.js] Re-initializing jwt');
     if (!INITIAL_JWT_OPTIONS) {
         return;
     }
@@ -415,10 +416,12 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     if (refreshToken) { DEFAULT_KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
 
     // for multi tab communication
-    broadcastChannel = new BroadcastChannel(`jwt_${options.realm}`);
+    if (!broadcastChannel) {
+        broadcastChannel = new BroadcastChannel(`jwt_${options.realm}`);
+    }
     broadcastChannel.onmessage = function(e) {
-        console.log('Received', e.data);
-        if (!this.isAuthenticated()) {
+        log(`[jwt.js] BroadcastChannel, Received event : ${e.data.type}`);
+        if ( e.data && e.data.type === 'Initialized' && !this.isAuthenticated()) {
            this.reinit();
         }
     }.bind(this);
@@ -457,22 +460,26 @@ function keycloakInitSuccess(authenticated: boolean) {
             log('[jwt.js] unable to reset the fail count');
             startRefreshLoop();
         });
+        if (broadcastChannel) {
+            broadcastChannel.postMessage({type: 'Initialized'});
+        }
     }
     keycloakInitHandler();
 }
 
 /**
- * Call any init event handlers that have are registered.  One time call then removed.
+ * Call any init event handlers that have are registered.
  *
  * @memberof module:jwt
  * @private
  */
 function handleInitEvents() {
-    while (events.init.length) {
-        const event = events.init.shift();
-        if (typeof event === 'function') {
-            event(Jwt);
-        }
+    if (events.init.length > 0) {
+        events.init.forEach((event) => {
+            if (typeof event === 'function') {
+                event(Jwt);
+            }
+        });
     }
 }
 
@@ -525,14 +532,14 @@ function handleLogoutEvents() {
 }
 
 /**
- * Call auth success events
+ * Call init error events
  *
  * @memberof module:jwt
  * @private
  */
-function handleAuthSuccessEvents() {
-    if (events.authSuccess.length > 0) {
-        events.authSuccess.forEach((event) => {
+function handleInitErrorEvents() {
+    if (events.initError.length > 0) {
+        events.initError.forEach((event) => {
             if (typeof event === 'function') {
                 event(Jwt);
             }
@@ -705,7 +712,7 @@ function isMaster(): boolean {
  */
 function keycloakInitError() {
     log('[jwt.js] init error');
-    keycloakInitHandler();
+    keycloakInitErrorHandler();
     removeToken();
     removeRefreshToken();
     cancelRefreshLoop(); // Cancel update token refresh loop
@@ -754,13 +761,14 @@ function keycloakLogoutHandler() {
 }
 
 /**
- * Call events after keycloak auth success.
+ * Call events after keycloak init error.
  *
  * @memberof module:jwt
  * @private
  */
-function keycloakAuthSuccessHandler() {
-    handleAuthSuccessEvents();
+function keycloakInitErrorHandler() {
+    state.initialized = false;
+    handleInitErrorEvents();
 }
 
 /**
@@ -833,11 +841,6 @@ function ssoUrl(isInternal?: boolean) {
  */
 function onAuthSuccessCallback() {
     log('[jwt.js] onAuthSuccessCallback');
-    startRefreshLoop();
-    keycloakAuthSuccessHandler();
-    if (broadcastChannel) {
-        broadcastChannel.postMessage('Auth Success.');
-    }
 }
 
 function onAuthError() {
@@ -897,13 +900,13 @@ function onAuthLogout(func: Function) {
 }
 
 /**
- * Register a function to be called when keycloak has authed successfully.
+ * Register a function to be called when keycloak init fails.
  *
  * @memberof module:jwt
  */
-function onAuthSuccess(func: Function) {
+function onInitError(func: Function) {
     log('[jwt.js] registering auth logout handler');
-    events.authSuccess.push(func);
+    events.initError.push(func);
 }
 
 function onTokenExpiredCallback() {
@@ -1011,6 +1014,7 @@ function startRefreshLoop() {
         log('[jwt.js] Not starting the refresh loop interval as disablePolling is true.');
     } else {
         if (!refreshIntervalId) {
+            log('[jwt.js] Starting refresh loop.');
             refreshIntervalId = setInterval(refreshLoop, REFRESH_INTERVAL);
         } else {
             log('[jwt.js] Cannot start refresh loop as it is already started.');
@@ -1519,10 +1523,10 @@ const Jwt = {
     startRefreshLoop: initialized(startRefreshLoop),
     isTokenExpired: initialized(isTokenExpired),
     onInit: onInit,
+    onInitError: onInitError,
     onAuthRefreshError: onAuthRefreshError,
     onAuthRefreshSuccess: onAuthRefreshSuccess,
     onAuthLogout: onAuthLogout,
-    onAuthSuccess: onAuthSuccess,
     onTokenExpired: onTokenExpired,
     onInitialUpdateToken: onInitialUpdateToken,
     onTokenMismatch: onTokenMismatch,
