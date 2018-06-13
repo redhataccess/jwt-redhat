@@ -417,12 +417,18 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
 
     // for multi tab communication
     if (!broadcastChannel) {
-        broadcastChannel = new BroadcastChannel(`jwt_redhat_${options.realm}_${options.clientId}`);
+        broadcastChannel = new BroadcastChannel(`jwt_${options.realm}`);
     }
     broadcastChannel.onmessage = function(e) {
         log(`[jwt.js] BroadcastChannel, Received event : ${e.data.type}`);
         if ( e.data && e.data.type === 'Initialized' && !this.isAuthenticated()) {
-           this.reinit();
+           if (e.data.clientId && options.clientId === e.data.clientId) {
+            this.reinit();
+           } else {
+            // Better approach would be to call login in a iFrame.
+            // This would avoid page refresh if re-login was done by some other clientId
+            // this.login();
+           }
         }
     }.bind(this);
 
@@ -461,7 +467,7 @@ function keycloakInitSuccess(authenticated: boolean) {
             startRefreshLoop();
         });
         if (broadcastChannel) {
-            broadcastChannel.postMessage({type: 'Initialized'});
+            broadcastChannel.postMessage({type: 'Initialized', clientId: INITIAL_JWT_OPTIONS.keycloakOptions.clientId});
         }
     }
     keycloakInitHandler();
