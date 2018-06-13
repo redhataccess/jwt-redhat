@@ -29,6 +29,7 @@ export interface IJwtOptions {
     disablePolling?: boolean;
     reLoginIframeEnabled?: boolean;
     reLoginIframe?: any;
+    disableBroadcastMessage?: boolean;
 }
 
 

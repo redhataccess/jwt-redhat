@@ -374,23 +374,24 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     if (refreshToken) { DEFAULT_KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
 
     // for multi tab communication
-    if (!broadcastChannel) {
-        broadcastChannel = new BroadcastChannel(`jwt_${options.realm}`);
-    }
-    broadcastChannel.onmessage = function (e: IBroadcastChannelPayloadEvent) {
-        log(`[jwt.js] BroadcastChannel, Received event : ${e.data.type}`);
-        if (e && e.data && e.data.type === 'Initialized' && !this.isAuthenticated() && e.data.authenticated) {
-            if (options.clientId === e.data.clientId) {
-                this.reinit();
-            } else {
-                if (jwtOptions.reLoginIframeEnabled && jwtOptions.reLoginIframe) {
-                    const iframeMessage = { value: null, message: 'reinit' };
-                    jwtOptions.reLoginIframe.postMessage(JSON.stringify(iframeMessage), '*');
+    if (!jwtOptions.disableBroadcastMessage) {
+        if (!broadcastChannel) {
+            broadcastChannel = new BroadcastChannel(`jwt_${options.realm}`);
+        }
+        broadcastChannel.onmessage = function (e: IBroadcastChannelPayloadEvent) {
+            log(`[jwt.js] BroadcastChannel, Received event : ${e.data.type}`);
+            if (this && e && e.data && e.data.type === 'Initialized' && !this.isAuthenticated() && e.data.authenticated) {
+                if (options.clientId === e.data.clientId) {
+                    this.reinit();
+                } else {
+                    if (jwtOptions.reLoginIframeEnabled && jwtOptions.reLoginIframe) {
+                        const iframeMessage = { value: null, message: 'reinit' };
+                        jwtOptions.reLoginIframe.contentWindow.postMessage(JSON.stringify(iframeMessage), '*');
+                    }
                 }
             }
-        }
-    }.bind(this);
-
+        }.bind(this);
+    }
     state.keycloak = Keycloak(options);
 
     // wire up our handlers to keycloak's events
@@ -425,7 +426,7 @@ function keycloakInitSuccess(authenticated: boolean) {
             log('[jwt.js] unable to reset the fail count');
             startRefreshLoop();
         });
-        if (broadcastChannel) {
+        if (!INITIAL_JWT_OPTIONS.disableBroadcastMessage && broadcastChannel) {
             broadcastChannel.postMessage({
                 type: 'Initialized',
                 clientId: INITIAL_JWT_OPTIONS.keycloakOptions.clientId,
@@ -437,8 +438,10 @@ function keycloakInitSuccess(authenticated: boolean) {
             let iframeJwtOptions = Object.assign({}, INITIAL_JWT_OPTIONS);
             iframeJwtOptions.reLoginIframeEnabled = false;
             iframeJwtOptions.reLoginIframe = null;
+            // no need to broadcast messages from iframe
+            iframeJwtOptions.disableBroadcastMessage = true;
             const iframeMessage = { value: iframeJwtOptions, message: 'init' };
-            INITIAL_JWT_OPTIONS.reLoginIframe.postMessage(JSON.stringify(iframeMessage), '*');
+            INITIAL_JWT_OPTIONS.reLoginIframe.contentWindow.postMessage(JSON.stringify(iframeMessage), '*');
         }
     }
     keycloakInitHandler();
@@ -874,7 +877,7 @@ function onAuthLogout(func: Function) {
  * @memberof module:jwt
  */
 function onInitError(func: Function) {
-    log('[jwt.js] registering auth logout handler');
+    log('[jwt.js] registering init error handler');
     events.initError.push(func);
 }
 
