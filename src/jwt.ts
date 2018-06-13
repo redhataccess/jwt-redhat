@@ -422,7 +422,7 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     broadcastChannel.onmessage = function(e) {
         log(`[jwt.js] BroadcastChannel, Received event : ${e.data.type}`);
         if ( e.data && e.data.type === 'Initialized' && !this.isAuthenticated()) {
-           if (e.data.clientId && options.clientId === e.data.clientId) {
+           if (options.clientId === e.data.clientId) {
             this.reinit();
            } else {
             // Better approach would be to call login in a iFrame.
