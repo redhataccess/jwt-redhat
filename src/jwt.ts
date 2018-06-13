@@ -417,7 +417,7 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
 
     // for multi tab communication
     if (!broadcastChannel) {
-        broadcastChannel = new BroadcastChannel(`jwt_${options.realm}`);
+        broadcastChannel = new BroadcastChannel(`jwt_redhat_${options.realm}_${options.clientId}`);
     }
     broadcastChannel.onmessage = function(e) {
         log(`[jwt.js] BroadcastChannel, Received event : ${e.data.type}`);
