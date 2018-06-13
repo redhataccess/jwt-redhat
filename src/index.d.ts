@@ -40,7 +40,6 @@ declare namespace Jwt {
     export function onTokenExpired(func: Function): void;
     export function onInitialUpdateToken(func: Function): void;
     export function onTokenMismatch(func: Function): void;
-    export function isMaster(): boolean;
     export function init(options: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError>;
     export function enableDebugLogging();
     export function disableDebugLogging();

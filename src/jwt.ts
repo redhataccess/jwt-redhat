@@ -8,11 +8,6 @@ import {
 } from './cacheUtils';
 
 import {
-    // TokenUpdateScheduler,
-    IUpdateTokenEvent
-} from './tokenUpdateScheduler';
-
-import {
     IKeycloakOptions,
     IState,
     IJwtUser,
@@ -329,45 +324,6 @@ function log(message: string) {
             }
         });
     } catch (e) { }
-}
-
-function isLocalStorageAvailable() {
-    const test = 'test-local-storage';
-    try {
-        localStorage.setItem(test, test);
-        localStorage.removeItem(test);
-        return true;
-    } catch (e) {
-        return false;
-    }
-}
-
-// Disabling master/slave token updates until further testing.  One major issue is that
-// slave tabs are unaware if the master tab fails to update the token leading to the slave tabs
-// sending requests with expired tokens even since the isTokenExpired always returns false on
-// slave tabs since the master is in control.
-// when it is technically true.
-// const tokenUpdateScheduler = isLocalStorageAvailable() ? new TokenUpdateScheduler() : null;
-const tokenUpdateScheduler = null;
-if (tokenUpdateScheduler) {
-    tokenUpdateScheduler.logMessage = function (data) {
-        log(`[jwt.js] [Token Update Scheduler] ${data.text}`);
-    };
-
-    tokenUpdateScheduler.masterDidChange = function () {
-        log(`[jwt.js] [Token Update Scheduler] This tab became ${this.isMaster ? 'master' : 'slave'}`);
-    };
-
-    // Call this to log out if the current tab is master or slave
-    tokenUpdateScheduler.masterDidChange();
-
-    tokenUpdateScheduler.updateTokenEvent = function (data: IUpdateTokenEvent) {
-        if (!tokenUpdateScheduler.isMaster && data) {
-            log(`[jwt.js] [Token Update Scheduler] calling keycloak setToken on this slave instance to update with the refreshed master token.`);
-            state.keycloak.setToken(data.token as any, data.refreshToken, data.idToken, data.timeLocal);
-            timeSkew = state.keycloak.timeSkew;
-        }
-    };
 }
 
 // Keep track of the setInterval for the refresh token so we can cancel it and restart it if need be
@@ -718,14 +674,6 @@ function disableDebugLogging() {
     CacheUtils.set('debug-logging', newBooleanCache);
 }
 
-function isMaster(): boolean {
-    if (tokenUpdateScheduler) {
-        return tokenUpdateScheduler.isMaster;
-    } else {
-        return true;
-    }
-}
-
 /**
  * Keycloak init error handler.
  * @memberof module:jwt
@@ -954,18 +902,7 @@ function onTokenExpired(func: Function) {
  * @private
  */
 function isTokenExpired(tte: number = REFRESH_TTE): boolean {
-    if (isLocalStorageAvailable && tokenUpdateScheduler) {
-        if (tokenUpdateScheduler.isMaster) {
-            return state.keycloak.isTokenExpired(tte) === true;
-        } else {
-            // If the instance is a slave, then the getToken exp will always be out of date
-            // most likely resulting in a -1 timeSkew so we should just return false here
-            // as the master is responsible for keeping the token in check
-            return false;
-        }
-    } else {
-        return state.keycloak.isTokenExpired(tte) === true;
-    }
+    return state.keycloak.isTokenExpired(tte) === true;
 }
 /**
  * Refreshes the access token.  Recursively can be called with an iteration count
@@ -982,27 +919,8 @@ async function updateToken(force: boolean = false): Promise<boolean> {
                 const msg = `Not updating token because updating failed more than ${FAIL_COUNT_THRESHOLD} times in a row`;
                 log(`[jwt.js] ${msg}`);
                 reject(msg);
-            } else if (isLocalStorageAvailable && tokenUpdateScheduler) {
-                if (tokenUpdateScheduler.isMaster) {
-                    log(`[jwt.js] running updateToken as this tab is master${force === true ? ', forcing the token update' : ', updating if within ' + REFRESH_TTE + ' seconds'}`);
-                    return state.keycloak
-                        .updateToken(force === true ? -1 : REFRESH_TTE)
-                        .success((refreshed: boolean) => {
-                            updateTokenSuccess(refreshed);
-                            resolve(refreshed);
-                        })
-                        .error((e: any) => {
-                            updateTokenFailure(e);
-                            reject(e);
-                        });
-                } else {
-                    log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
-                    // TODO -- consider broadcasting a message to the master to update.
-                    // Also consider the implications of default returning a setSuccess here
-                    resolve(false);
-                }
             } else {
-                log('[jwt.js] running updateToken (without cross-tab communcation)');
+                log('[jwt.js] running updateToken');
                 state.keycloak
                     .updateToken(force === true ? -1 : REFRESH_TTE)
                     .success((refreshed: boolean) => {
@@ -1134,7 +1052,6 @@ function updateTokenFailure(e: ITokenUpdateFailure) {
 function setRefreshToken(refresh_token: string) {
     log('[jwt.js] setting refresh token');
     lib.store.local.set(REFRESH_TOKEN_NAME, refresh_token);
-    broadcastUpdatedToken();
 }
 
 /**
@@ -1146,18 +1063,6 @@ function setRefreshToken(refresh_token: string) {
 function removeRefreshToken() {
     log('[jwt.js] removing refresh token');
     lib.store.local.remove(REFRESH_TOKEN_NAME);
-}
-
-function broadcastUpdatedToken() {
-    if (tokenUpdateScheduler) {
-        const tokenUpdateData: IUpdateTokenEvent = {
-            token: state.keycloak.token,
-            refreshToken: state.keycloak.refreshToken,
-            idToken: state.keycloak.idToken,
-            timeLocal: state.keycloak.timeLocal
-        };
-        tokenUpdateScheduler.broadcast('updateTokenEvent', tokenUpdateData);
-    }
 }
 
 /**
@@ -1176,7 +1081,6 @@ function setToken(token) {
         log('[jwt.js] setting access token');
         lib.store.local.set(TOKEN_NAME, token);
         document.cookie = COOKIE_TOKEN_NAME + '=' + token + ';path=/;max-age=' + 15 * 60 + ';domain=.' + origin + ';secure;';
-        broadcastUpdatedToken();
     }
 }
 
@@ -1555,7 +1459,6 @@ const Jwt = {
     onAuthError: onAuthError,
     enableDebugLogging: enableDebugLogging,
     disableDebugLogging: disableDebugLogging,
-    isMaster: isMaster,
     init: init,
     reinit: reinit,
     _state: state,
