@@ -20,7 +20,9 @@ import {
     IToken,
     IInternalToken,
     ITokenUpdateFailure,
-    IJwtOptions
+    IJwtOptions,
+    IBroadcastChannelPayload,
+    IBroadcastChannelPayloadEvent
 } from './models';
 
 declare global {
@@ -419,16 +421,17 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     if (!broadcastChannel) {
         broadcastChannel = new BroadcastChannel(`jwt_${options.realm}`);
     }
-    broadcastChannel.onmessage = function(e) {
+    broadcastChannel.onmessage = function (e: IBroadcastChannelPayloadEvent) {
         log(`[jwt.js] BroadcastChannel, Received event : ${e.data.type}`);
-        if ( e.data && e.data.type === 'Initialized' && !this.isAuthenticated()) {
-           if (options.clientId === e.data.clientId) {
-            this.reinit();
-           } else {
-            // Better approach would be to call login in a iFrame.
-            // This would avoid page refresh if re-login was done by some other clientId
-            // this.login();
-           }
+        if (e && e.data && e.data.type === 'Initialized' && !this.isAuthenticated() && e.data.authenticated) {
+            if (options.clientId === e.data.clientId) {
+                this.reinit();
+            } else {
+                if (jwtOptions.reLoginIframeEnabled && jwtOptions.reLoginIframe) {
+                    const iframeMessage = { value: null, message: 'reinit' };
+                    jwtOptions.reLoginIframe.postMessage(JSON.stringify(iframeMessage), '*');
+                }
+            }
         }
     }.bind(this);
 
@@ -467,7 +470,19 @@ function keycloakInitSuccess(authenticated: boolean) {
             startRefreshLoop();
         });
         if (broadcastChannel) {
-            broadcastChannel.postMessage({type: 'Initialized', clientId: INITIAL_JWT_OPTIONS.keycloakOptions.clientId});
+            broadcastChannel.postMessage({
+                type: 'Initialized',
+                clientId: INITIAL_JWT_OPTIONS.keycloakOptions.clientId,
+                authenticated
+            } as IBroadcastChannelPayload);
+        }
+        // initialize re-login iframe only after the application has initialized
+        if (INITIAL_JWT_OPTIONS.reLoginIframeEnabled && INITIAL_JWT_OPTIONS.reLoginIframe) {
+            let iframeJwtOptions = Object.assign({}, INITIAL_JWT_OPTIONS);
+            iframeJwtOptions.reLoginIframeEnabled = false;
+            iframeJwtOptions.reLoginIframe = null;
+            const iframeMessage = { value: iframeJwtOptions, message: 'init' };
+            INITIAL_JWT_OPTIONS.reLoginIframe.postMessage(JSON.stringify(iframeMessage), '*');
         }
     }
     keycloakInitHandler();
