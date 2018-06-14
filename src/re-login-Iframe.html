@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Jwt Redhat Re-login Iframe</title>
+</head>
+<body>
+    <script>
+        var callParentReinit = false;
+        receiveMessage = function (event) {
+            if (!event || !event.data || event.data === 'changed' || event.data === 'unchanged' || event.data === 'error' || !jwt) {
+                return;
+            }
+
+            var data = {message:''};
+            try {
+                data = JSON.parse(event.data);
+            } catch (error) {
+                return;
+            }
+
+            jwt.default.onInit(function () {
+                if(this.callParentReinit && jwt.default.isAuthenticated() && window.parent.sessionjs)  {
+                    console.log('reinitializing parent');
+                    window.parent.sessionjs.reinit();
+                    this.callParentReinit = false;
+                }
+            }.bind(this));
+
+            switch (data.message) {
+                case 'reinit':
+                    try {
+                        if (!jwt.default.isAuthenticated()) {
+                            console.log('reinitializing');
+                            this.callParentReinit = true;
+                            jwt.default.reinit();
+                        }
+                    } catch (e) {
+                        console.log(e + 're-init error');
+                    }
+                    break;
+                case 'init':
+                    console.log('initializing');
+                    jwt.default.init(data.value);
+                    this.callParentReinit = false;
+                    break;
+            }
+        }.bind(this);
+        window.addEventListener("message", receiveMessage, false);
+    </script>
+</body>
+
+</html>

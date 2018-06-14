@@ -8,11 +8,6 @@ import {
 } from './cacheUtils';
 
 import {
-    // TokenUpdateScheduler,
-    IUpdateTokenEvent
-} from './tokenUpdateScheduler';
-
-import {
     IKeycloakOptions,
     IState,
     IJwtUser,
@@ -20,13 +15,97 @@ import {
     IToken,
     IInternalToken,
     ITokenUpdateFailure,
-    IJwtOptions
+    IJwtOptions,
+    IBroadcastChannelPayload,
+    IBroadcastChannelPayloadEvent
 } from './models';
 
 declare global {
     interface Window {
         Raven: any;
+        BroadcastChannel?: any;
     }
+}
+
+// Use Polyfill for BroadcastChannel if not supported natively by browser
+if (!('BroadcastChannel' in window)) {
+    log(`[jwt.js] Using polyfill for BroadcastChannel`);
+    (function (global) {
+        let channels = [];
+
+        function BroadcastChannel(channel) {
+            let $this = this;
+            channel = String(channel);
+
+            let id = '$BroadcastChannel$' + channel + '$';
+
+            channels[id] = channels[id] || [];
+            channels[id].push(this);
+
+            this._name = channel;
+            this._id = id;
+            this._closed = false;
+            this._mc = new MessageChannel();
+            this._mc.port1.start();
+            this._mc.port2.start();
+
+            global.addEventListener('storage', function (e) {
+                if (e.storageArea !== global.localStorage) return;
+                if (e.newValue === null) return;
+                if (e.key.substring(0, id.length) !== id) return;
+                let data = JSON.parse(e.newValue);
+                $this._mc.port2.postMessage(data);
+            });
+        }
+
+        BroadcastChannel.prototype = {
+            // BroadcastChannel API
+            get name() { return this._name; },
+            postMessage: function (message) {
+                let $this = this;
+                if (this._closed) {
+                    let e = new Error();
+                    e.name = 'InvalidStateError';
+                    throw e;
+                }
+                let value = JSON.stringify(message);
+
+                // Broadcast to other contexts via storage events...
+                let key = this._id + String(Date.now()) + '$' + String(Math.random());
+                global.localStorage.setItem(key, value);
+                setTimeout(function () { global.localStorage.removeItem(key); }, 500);
+
+                // Broadcast to current context via ports
+                channels[this._id].forEach(function (bc) {
+                    if (bc === $this) return;
+                    bc._mc.port2.postMessage(JSON.parse(value));
+                });
+            },
+            close: function () {
+                if (this._closed) return;
+                this._closed = true;
+                this._mc.port1.close();
+                this._mc.port2.close();
+
+                let index = channels[this._id].indexOf(this);
+                channels[this._id].splice(index, 1);
+            },
+
+            // EventTarget API
+            get onmessage() { return this._mc.port1.onmessage; },
+            set onmessage(value) { this._mc.port1.onmessage = value; },
+            addEventListener: function (type, listener /*, useCapture*/) {
+                return this._mc.port1.addEventListener.apply(this._mc.port1, arguments);
+            },
+            removeEventListener: function (type, listener /*, useCapture*/) {
+                return this._mc.port1.removeEventListener.apply(this._mc.port1, arguments);
+            },
+            dispatchEvent: function (event) {
+                return this._mc.port1.dispatchEvent.apply(this._mc.port1, arguments);
+            }
+        };
+        global.BroadcastChannel = global.BroadcastChannel || BroadcastChannel;
+    }(self));
 }
 
 declare const Raven: {
@@ -181,17 +260,13 @@ const JWT_REDHAT_IDENTIFIER = 'jwt_redhat';
 const TOKEN_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_token`;
 const REFRESH_TOKEN_NAME_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_refresh_token`;
 const FAIL_COUNT_NAME_SURFIX = `_${JWT_REDHAT_IDENTIFIER}_refresh_fail_count`;
-const SESSION_COUNT_SURFIX_BEFORE = `_${JWT_REDHAT_IDENTIFIER}_session_expire_count_before`;
-const SESSION_COUNT_SURFIX_AFTER = `_${JWT_REDHAT_IDENTIFIER}_session_expire_count_after`;
 
 const INTERNAL_ROLE = 'redhat:employees';
 let TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${TOKEN_SURFIX}`;
-let INITIALIZE_CONFIRGUATION: IJwtOptions = undefined;
+let INITIAL_JWT_OPTIONS: IJwtOptions = undefined;
 let COOKIE_TOKEN_NAME = TOKEN_NAME;
 let REFRESH_TOKEN_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
 let FAIL_COUNT_NAME = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${FAIL_COUNT_NAME_SURFIX}`;
-let SESSION_COUNT_BEFORE_KEY = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${SESSION_COUNT_SURFIX_BEFORE}`;
-let SESSION_COUNT_AFTER_KEY = `${DEFAULT_KEYCLOAK_OPTIONS.clientId}${SESSION_COUNT_SURFIX_AFTER}`;
 
 const TOKEN_EXP_TTE = 58; // Seconds to check forward if the token will expire
 const REFRESH_INTERVAL = 1 * TOKEN_EXP_TTE * 1000; // ms. check token for upcoming expiration every this many milliseconds
@@ -199,8 +274,8 @@ const REFRESH_TTE = 90; // seconds. refresh only token if it would expire this m
 const FAIL_COUNT_THRESHOLD = 5; // how many times in a row token refresh can fail before we give up trying
 let userInfo: IJwtUser;  // To be used to set the user context in Raven
 let disablePolling = false;
-let tokenExpiryTime = 14;
 let initialUserToken = null;
+let broadcastChannel = null;
 
 // This is explicitly to track when the first successfull updateToken happens.
 let timeSkew = null;
@@ -231,7 +306,8 @@ const events = {
     refreshError: [],
     refreshSuccess: [],
     logout: [],
-    tokenExpired: []
+    tokenExpired: [],
+    initError: []
 };
 
 document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
@@ -250,45 +326,6 @@ function log(message: string) {
     } catch (e) { }
 }
 
-function isLocalStorageAvailable() {
-    const test = 'test-local-storage';
-    try {
-        localStorage.setItem(test, test);
-        localStorage.removeItem(test);
-        return true;
-    } catch (e) {
-        return false;
-    }
-}
-
-// Disabling master/slave token updates until further testing.  One major issue is that
-// slave tabs are unaware if the master tab fails to update the token leading to the slave tabs
-// sending requests with expired tokens even since the isTokenExpired always returns false on
-// slave tabs since the master is in control.
-// when it is technically true.
-// const tokenUpdateScheduler = isLocalStorageAvailable() ? new TokenUpdateScheduler() : null;
-const tokenUpdateScheduler = null;
-if (tokenUpdateScheduler) {
-    tokenUpdateScheduler.logMessage = function (data) {
-        log(`[jwt.js] [Token Update Scheduler] ${data.text}`);
-    };
-
-    tokenUpdateScheduler.masterDidChange = function () {
-        log(`[jwt.js] [Token Update Scheduler] This tab became ${this.isMaster ? 'master' : 'slave'}`);
-    };
-
-    // Call this to log out if the current tab is master or slave
-    tokenUpdateScheduler.masterDidChange();
-
-    tokenUpdateScheduler.updateTokenEvent = function (data: IUpdateTokenEvent) {
-        if (!tokenUpdateScheduler.isMaster && data) {
-            log(`[jwt.js] [Token Update Scheduler] calling keycloak setToken on this slave instance to update with the refreshed master token.`);
-            state.keycloak.setToken(data.token as any, data.refreshToken, data.idToken, data.timeLocal);
-            timeSkew = state.keycloak.timeSkew;
-        }
-    };
-}
-
 // Keep track of the setInterval for the refresh token so we can cancel it and restart it if need be
 let refreshIntervalId;
 /**
@@ -298,12 +335,12 @@ let refreshIntervalId;
  * @private
  */
 function reinit() {
-    if (!INITIALIZE_CONFIRGUATION) {
+    log('[jwt.js] Re-initializing jwt');
+    if (!INITIAL_JWT_OPTIONS) {
         return;
     }
-    resetSessionKeyCount();
     resetKeyCount(FAIL_COUNT_NAME);
-    init(INITIALIZE_CONFIRGUATION);
+    init(INITIAL_JWT_OPTIONS);
 }
 
 /**
@@ -315,11 +352,10 @@ function reinit() {
 function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError> {
     log('[jwt.js] initializing');
 
-    INITIALIZE_CONFIRGUATION = jwtOptions;
+    INITIAL_JWT_OPTIONS = jwtOptions;
     const options = jwtOptions.keycloakOptions ? Object.assign({}, DEFAULT_KEYCLOAK_OPTIONS, jwtOptions.keycloakOptions) : DEFAULT_KEYCLOAK_OPTIONS;
     options.url = !options.url ? ssoUrl(options.internalAuth) : options.url;
     disablePolling = jwtOptions.disablePolling;
-    tokenExpiryTime = jwtOptions.tokenExpiryTime ? jwtOptions.tokenExpiryTime : 14;
     initialUserToken = null;
 
     // Token names are now namespaced by clientId, thus moving the token_name evaluation
@@ -330,8 +366,6 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     COOKIE_TOKEN_NAME = TOKEN_NAME;
     REFRESH_TOKEN_NAME = `${options.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
     FAIL_COUNT_NAME = `${options.clientId}${FAIL_COUNT_NAME_SURFIX}`;
-    SESSION_COUNT_BEFORE_KEY = `${options.clientId}${SESSION_COUNT_SURFIX_BEFORE}`;
-    SESSION_COUNT_AFTER_KEY = `${options.clientId}${SESSION_COUNT_SURFIX_AFTER}`;
 
     token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
     refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
@@ -339,12 +373,29 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     if (token && token !== 'undefined') { DEFAULT_KEYCLOAK_INIT_OPTIONS.token = token; }
     if (refreshToken) { DEFAULT_KEYCLOAK_INIT_OPTIONS.refreshToken = refreshToken; }
 
-
-
+    // for multi tab communication
+    if (!jwtOptions.disableBroadcastMessage) {
+        if (!broadcastChannel) {
+            broadcastChannel = new BroadcastChannel(`jwt_${options.realm}`);
+        }
+        broadcastChannel.onmessage = function (e: IBroadcastChannelPayloadEvent) {
+            log(`[jwt.js] BroadcastChannel, Received event : ${e.data.type}`);
+            if (this && e && e.data && e.data.type === 'Initialized' && !this.isAuthenticated() && e.data.authenticated) {
+                if (options.clientId === e.data.clientId) {
+                    this.reinit();
+                } else {
+                    if (jwtOptions.reLoginIframeEnabled && jwtOptions.reLoginIframe) {
+                        const iframeMessage = { value: null, message: 'reinit' };
+                        jwtOptions.reLoginIframe.contentWindow.postMessage(JSON.stringify(iframeMessage), '*');
+                    }
+                }
+            }
+        }.bind(this);
+    }
     state.keycloak = Keycloak(options);
 
     // wire up our handlers to keycloak's events
-    state.keycloak.onAuthSuccess = onAuthSuccess;
+    state.keycloak.onAuthSuccess = onAuthSuccessCallback;
     state.keycloak.onAuthError = onAuthError;
     state.keycloak.onAuthRefreshSuccess = onAuthRefreshSuccessCallback;
     state.keycloak.onAuthRefreshError = onAuthRefreshErrorCallback;
@@ -369,29 +420,46 @@ function keycloakInitSuccess(authenticated: boolean) {
         setToken(state.keycloak.token);
         setRefreshToken(state.keycloak.refreshToken);
         initialUserToken = getToken();
-        resetSessionKeyCount();
         resetKeyCount(FAIL_COUNT_NAME).then(() => {
             startRefreshLoop();
         }).catch(() => {
             log('[jwt.js] unable to reset the fail count');
             startRefreshLoop();
         });
+        if (!INITIAL_JWT_OPTIONS.disableBroadcastMessage && broadcastChannel) {
+            broadcastChannel.postMessage({
+                type: 'Initialized',
+                clientId: INITIAL_JWT_OPTIONS.keycloakOptions.clientId,
+                authenticated
+            } as IBroadcastChannelPayload);
+        }
+        // initialize re-login iframe only after the application has initialized
+        if (INITIAL_JWT_OPTIONS.reLoginIframeEnabled && INITIAL_JWT_OPTIONS.reLoginIframe) {
+            let iframeJwtOptions = Object.assign({}, INITIAL_JWT_OPTIONS);
+            iframeJwtOptions.reLoginIframeEnabled = false;
+            iframeJwtOptions.reLoginIframe = null;
+            // no need to broadcast messages from iframe
+            iframeJwtOptions.disableBroadcastMessage = true;
+            const iframeMessage = { value: iframeJwtOptions, message: 'init' };
+            INITIAL_JWT_OPTIONS.reLoginIframe.contentWindow.postMessage(JSON.stringify(iframeMessage), '*');
+        }
     }
     keycloakInitHandler();
 }
 
 /**
- * Call any init event handlers that have are registered.  One time call then removed.
+ * Call any init event handlers that have are registered.
  *
  * @memberof module:jwt
  * @private
  */
 function handleInitEvents() {
-    while (events.init.length) {
-        const event = events.init.shift();
-        if (typeof event === 'function') {
-            event(Jwt);
-        }
+    if (events.init.length > 0) {
+        events.init.forEach((event) => {
+            if (typeof event === 'function') {
+                event(Jwt);
+            }
+        });
     }
 }
 
@@ -436,6 +504,22 @@ function handleRefreshSuccessEvents() {
 function handleLogoutEvents() {
     if (events.logout.length > 0) {
         events.logout.forEach((event) => {
+            if (typeof event === 'function') {
+                event(Jwt);
+            }
+        });
+    }
+}
+
+/**
+ * Call init error events
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function handleInitErrorEvents() {
+    if (events.initError.length > 0) {
+        events.initError.forEach((event) => {
             if (typeof event === 'function') {
                 event(Jwt);
             }
@@ -558,10 +642,10 @@ function onTokenMismatch(func: Function) {
  * error caused when mixing sso envs/tokens and requires a logout/log back in
  * @memberof module:jwt
  */
-function onJwtTokenMisMatchFailed(func: Function) {
-    log(`[jwt.js] registering the onJwtTokenMisMatchFailed handler`);
+function onJwtTokenUpdateFailed(func: Function) {
+    log(`[jwt.js] registering the onJwtTokenUpdateFailed handler`);
     if (state.initialized) {
-        log(`[jwt.js] running event handler: onJwtTokenMisMatchFailed`);
+        log(`[jwt.js] running event handler: onJwtTokenUpdateFailed`);
         func(Jwt);
     } else {
         events.jwtTokenUpdateFailed.push(func);
@@ -593,14 +677,6 @@ function disableDebugLogging() {
     CacheUtils.set('debug-logging', newBooleanCache);
 }
 
-function isMaster(): boolean {
-    if (tokenUpdateScheduler) {
-        return tokenUpdateScheduler.isMaster;
-    } else {
-        return true;
-    }
-}
-
 /**
  * Keycloak init error handler.
  * @memberof module:jwt
@@ -608,9 +684,10 @@ function isMaster(): boolean {
  */
 function keycloakInitError() {
     log('[jwt.js] init error');
-    keycloakInitHandler();
+    keycloakInitErrorHandler();
     removeToken();
     removeRefreshToken();
+    cancelRefreshLoop(); // Cancel update token refresh loop
 }
 
 /**
@@ -653,6 +730,17 @@ function keycloakRefreshSuccessHandler() {
  */
 function keycloakLogoutHandler() {
     handleLogoutEvents();
+}
+
+/**
+ * Call events after keycloak init error.
+ *
+ * @memberof module:jwt
+ * @private
+ */
+function keycloakInitErrorHandler() {
+    state.initialized = false;
+    handleInitErrorEvents();
 }
 
 /**
@@ -723,13 +811,14 @@ function ssoUrl(isInternal?: boolean) {
  * @memberof module:jwt
  * @private
  */
-function onAuthSuccess() {
-    log('[jwt.js] onAuthSuccess');
+function onAuthSuccessCallback() {
+    log('[jwt.js] onAuthSuccessCallback');
 }
 
 function onAuthError() {
     removeToken();
     removeRefreshToken();
+    cancelRefreshLoop(); // Cancel update token refresh loop
     log('[jwt.js] onAuthError');
 }
 
@@ -782,6 +871,16 @@ function onAuthLogout(func: Function) {
     events.logout.push(func);
 }
 
+/**
+ * Register a function to be called when keycloak init fails.
+ *
+ * @memberof module:jwt
+ */
+function onInitError(func: Function) {
+    log('[jwt.js] registering init error handler');
+    events.initError.push(func);
+}
+
 function onTokenExpiredCallback() {
     log('[jwt.js] onTokenExpired');
     keycloakTokenExpiredHandler();
@@ -806,18 +905,7 @@ function onTokenExpired(func: Function) {
  * @private
  */
 function isTokenExpired(tte: number = REFRESH_TTE): boolean {
-    if (isLocalStorageAvailable && tokenUpdateScheduler) {
-        if (tokenUpdateScheduler.isMaster) {
-            return state.keycloak.isTokenExpired(tte) === true;
-        } else {
-            // If the instance is a slave, then the getToken exp will always be out of date
-            // most likely resulting in a -1 timeSkew so we should just return false here
-            // as the master is responsible for keeping the token in check
-            return false;
-        }
-    } else {
-        return state.keycloak.isTokenExpired(tte) === true;
-    }
+    return state.keycloak.isTokenExpired(tte) === true;
 }
 /**
  * Refreshes the access token.  Recursively can be called with an iteration count
@@ -834,27 +922,8 @@ async function updateToken(force: boolean = false): Promise<boolean> {
                 const msg = `Not updating token because updating failed more than ${FAIL_COUNT_THRESHOLD} times in a row`;
                 log(`[jwt.js] ${msg}`);
                 reject(msg);
-            } else if (isLocalStorageAvailable && tokenUpdateScheduler) {
-                if (tokenUpdateScheduler.isMaster) {
-                    log(`[jwt.js] running updateToken as this tab is master${force === true ? ', forcing the token update' : ', updating if within ' + REFRESH_TTE + ' seconds'}`);
-                    return state.keycloak
-                        .updateToken(force === true ? -1 : REFRESH_TTE)
-                        .success((refreshed: boolean) => {
-                            updateTokenSuccess(refreshed);
-                            resolve(refreshed);
-                        })
-                        .error((e: any) => {
-                            updateTokenFailure(e);
-                            reject(e);
-                        });
-                } else {
-                    log('[jwt.js] skipping updateToken call as this tab is a slave, see master tab');
-                    // TODO -- consider broadcasting a message to the master to update.
-                    // Also consider the implications of default returning a setSuccess here
-                    resolve(false);
-                }
             } else {
-                log('[jwt.js] running updateToken (without cross-tab communcation)');
+                log('[jwt.js] running updateToken');
                 state.keycloak
                     .updateToken(force === true ? -1 : REFRESH_TTE)
                     .success((refreshed: boolean) => {
@@ -887,6 +956,7 @@ function startRefreshLoop() {
         log('[jwt.js] Not starting the refresh loop interval as disablePolling is true.');
     } else {
         if (!refreshIntervalId) {
+            log('[jwt.js] Starting refresh loop.');
             refreshIntervalId = setInterval(refreshLoop, REFRESH_INTERVAL);
         } else {
             log('[jwt.js] Cannot start refresh loop as it is already started.');
@@ -936,7 +1006,6 @@ function updateTokenSuccess(refreshed: boolean) {
     log('[jwt.js] updateTokenSuccess, token was ' + ['not ', ''][~~refreshed] + 'refreshed');
     if (refreshed) {
         resetKeyCount(FAIL_COUNT_NAME); // token update worked, so reset number of consecutive failures
-        resetSessionKeyCount();
     }
 
     setToken(state.keycloak.token);
@@ -970,31 +1039,10 @@ function updateTokenFailure(e: ITokenUpdateFailure) {
     }
     failCountPassed(FAIL_COUNT_NAME, 4).then((isFailCountPassed) => {
         if (isFailCountPassed) {
-            if (!getToken()) {
-                sendToSentry(new Error(`[jwt.js] Update token failure: getToken() is undefined after ${userLoginTime} hours`), e);
-            }
-            sendToSentry(new Error(`[jwt.js] Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts`), e);
+            sendToSentry(new Error(`[jwt.js] Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts within ${userLoginTime} hours of logging in`), e);
         }
         incKeyCount(FAIL_COUNT_NAME);
     });
-    if (userLoginTime) {
-        const isUserSessionInGivenTime = userLoginTime < tokenExpiryTime;
-        if (isUserSessionInGivenTime) {
-            failCountPassed(SESSION_COUNT_BEFORE_KEY, 1).then((isFailCountPassed) => {
-                if (!isFailCountPassed) {
-                    sendToSentry(new Error(`[jwt.js] Update token failure: before ${tokenExpiryTime} hours, login duration ${userLoginTime} hours`), e);
-                    incKeyCount(SESSION_COUNT_BEFORE_KEY);
-                }
-            });
-        } else {
-            failCountPassed(SESSION_COUNT_AFTER_KEY, 1).then((isFailCountPassed) => {
-                if (!isFailCountPassed) {
-                    sendToSentry(new Error(`[jwt.js] Update token failure: after ${tokenExpiryTime} hours, login duration ${userLoginTime} hours`), e);
-                    incKeyCount(SESSION_COUNT_AFTER_KEY);
-                }
-            });
-        }
-    }
     handleJwtTokenUpdateFailedEvents();
 }
 
@@ -1007,7 +1055,6 @@ function updateTokenFailure(e: ITokenUpdateFailure) {
 function setRefreshToken(refresh_token: string) {
     log('[jwt.js] setting refresh token');
     lib.store.local.set(REFRESH_TOKEN_NAME, refresh_token);
-    broadcastUpdatedToken();
 }
 
 /**
@@ -1019,18 +1066,6 @@ function setRefreshToken(refresh_token: string) {
 function removeRefreshToken() {
     log('[jwt.js] removing refresh token');
     lib.store.local.remove(REFRESH_TOKEN_NAME);
-}
-
-function broadcastUpdatedToken() {
-    if (tokenUpdateScheduler) {
-        const tokenUpdateData: IUpdateTokenEvent = {
-            token: state.keycloak.token,
-            refreshToken: state.keycloak.refreshToken,
-            idToken: state.keycloak.idToken,
-            timeLocal: state.keycloak.timeLocal
-        };
-        tokenUpdateScheduler.broadcast('updateTokenEvent', tokenUpdateData);
-    }
 }
 
 /**
@@ -1049,7 +1084,6 @@ function setToken(token) {
         log('[jwt.js] setting access token');
         lib.store.local.set(TOKEN_NAME, token);
         document.cookie = COOKIE_TOKEN_NAME + '=' + token + ';path=/;max-age=' + 15 * 60 + ';domain=.' + origin + ';secure;';
-        broadcastUpdatedToken();
     }
 }
 
@@ -1279,7 +1313,7 @@ function logout(options: ILoginOptions = {}): void {
     removeToken();
     removeRefreshToken();
     resetKeyCount(FAIL_COUNT_NAME);
-    resetSessionKeyCount();
+    cancelRefreshLoop(); // Cancel update token refresh loop
     if (!options.skipRedirect) {
         state.keycloak.logout(options);
     }
@@ -1347,7 +1381,7 @@ function sendToSentry(error: Error, extra: Object) {
   * @return {Number} Get the count of the $key.
   * @memberof module:jwt
   */
-  function getCountForKey(key: string): Promise<number> {
+function getCountForKey(key: string): Promise<number> {
     try {
         return CacheUtils.get<INumberCache>(key).then((countCache) => {
             return countCache.value;
@@ -1397,11 +1431,6 @@ function resetKeyCount(key: string): Promise<INumberCache> {
     return CacheUtils.set<INumberCache, number>(key, newSentryLogCountCache);
 }
 
-function resetSessionKeyCount() {
-    resetKeyCount(SESSION_COUNT_BEFORE_KEY);
-    resetKeyCount(SESSION_COUNT_AFTER_KEY);
-}
-
 const Jwt = {
     login: initialized(login),
     logout: initialized(logout),
@@ -1422,17 +1451,17 @@ const Jwt = {
     startRefreshLoop: initialized(startRefreshLoop),
     isTokenExpired: initialized(isTokenExpired),
     onInit: onInit,
+    onInitError: onInitError,
     onAuthRefreshError: onAuthRefreshError,
     onAuthRefreshSuccess: onAuthRefreshSuccess,
     onAuthLogout: onAuthLogout,
     onTokenExpired: onTokenExpired,
     onInitialUpdateToken: onInitialUpdateToken,
     onTokenMismatch: onTokenMismatch,
-    onJwtTokenMisMatchFailed: onJwtTokenMisMatchFailed,
+    onJwtTokenUpdateFailed: onJwtTokenUpdateFailed,
     onAuthError: onAuthError,
     enableDebugLogging: enableDebugLogging,
     disableDebugLogging: disableDebugLogging,
-    isMaster: isMaster,
     init: init,
     reinit: reinit,
     _state: state,

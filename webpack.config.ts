@@ -7,11 +7,14 @@ import webpack, {
     DefinePlugin,
     optimize
 } from 'webpack';
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const HtmlWebpackInlineSourcePlugin = require('html-webpack-inline-source-plugin');
 
 module.exports = function(options) {
     const config: webpack.Configuration = {
         entry: './src/index',
         output: {
+            path: __dirname + '/dist',
             filename: options.filename,
             library: 'jwt',
             libraryTarget: 'umd'
@@ -43,7 +46,14 @@ module.exports = function(options) {
                 'process.env': {
                     'NODE_ENV': JSON.stringify('production')
                 }
-            })
+            }),
+            new HtmlWebpackPlugin({
+                filename: 're-login-Iframe.html',
+                template: './src/re-login-Iframe.html',
+                inject: true,
+                inlineSource: '.(js|css)$'
+            }),
+            new HtmlWebpackInlineSourcePlugin()
         ],
         resolve: {
             extensions: ['.js', '.ts']

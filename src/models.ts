@@ -27,7 +27,9 @@ export interface IJwtOptions {
     // It would now be the responsibility of the parent
     // app to do this.
     disablePolling?: boolean;
-    tokenExpiryTime?: number;
+    reLoginIframeEnabled?: boolean;
+    reLoginIframe?: any;
+    disableBroadcastMessage?: boolean;
 }
 
 
@@ -56,10 +58,10 @@ export interface IToken {
     RHAT_LOGIN: string; // "rhn-support-<name>"
     account_id: string; // "<numbers>"
     account_number: string; // "<numbers>"
-    acr: string; //"1"
+    acr: string; // "1"
     'allowed-origins': string[]; // ["*"]
     aud: string; // "customer-portal"
-    auth_time: number; //1501857720
+    auth_time: number; // 1501857720
     azp: string; // "customer-portal"
     client_session: string;
     country: string; // "US";
@@ -165,4 +167,15 @@ export interface IInternalToken {
     given_name: string;
     family_name: string;
     email: string;
+}
+
+export interface IBroadcastChannelPayload {
+    type: string;
+    clientId: string;
+    authenticated: boolean;
+}
+
+export interface IBroadcastChannelPayloadEvent {
+    data: IBroadcastChannelPayload;
+    [key: string]: any; // For other properties in the event
 }
