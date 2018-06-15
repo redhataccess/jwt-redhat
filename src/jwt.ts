@@ -30,82 +30,222 @@ declare global {
 // Use Polyfill for BroadcastChannel if not supported natively by browser
 if (!('BroadcastChannel' in window)) {
     log(`[jwt.js] Using polyfill for BroadcastChannel`);
-    (function (global) {
-        let channels = [];
+    (function (context) {
+        // Internal variables
+        let _channels = null, // List of channels
+            _tabId = null, // Current window browser tab identifier (see IE problem, later)
+            _prefix = 'polyBC_'; // prefix to identify localStorage keys.
 
-        function BroadcastChannel(channel) {
-            let $this = this;
-            channel = String(channel);
-
-            let id = '$BroadcastChannel$' + channel + '$';
-
-            channels[id] = channels[id] || [];
-            channels[id].push(this);
-
-            this._name = channel;
-            this._id = id;
-            this._closed = false;
-            this._mc = new MessageChannel();
-            this._mc.port1.start();
-            this._mc.port2.start();
-
-            global.addEventListener('storage', function (e) {
-                if (e.storageArea !== global.localStorage) return;
-                if (e.newValue === null) return;
-                if (e.key.substring(0, id.length) !== id) return;
-                let data = JSON.parse(e.newValue);
-                $this._mc.port2.postMessage(data);
-            });
+        /**
+         * Internal function, generates pseudo-random strings.
+         * @see http://stackoverflow.com/a/1349426/2187738
+         * @private
+         */
+        function getRandomString(length?: number) {
+            let text = '',
+                possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            for (let i = 0; i < (length || 5); i++) {
+                text += possible.charAt(Math.floor(Math.random() * possible.length));
+            }
+            return text;
         }
 
-        BroadcastChannel.prototype = {
-            // BroadcastChannel API
-            get name() { return this._name; },
-            postMessage: function (message) {
-                let $this = this;
-                if (this._closed) {
-                    let e = new Error();
-                    e.name = 'InvalidStateError';
-                    throw e;
+        /**
+         * Check if an object is empty.
+         * @see http://stackoverflow.com/a/679937/2187738
+         * @private
+         */
+        function isEmpty(obj) {
+            for (let prop in obj) {
+                if (obj.hasOwnProperty(prop))
+                    return false;
+            }
+            return true;
+            // Also this is good.
+            // returns 0 if empty or an integer > 0 if non-empty
+            // return Object.keys(obj).length;
+        }
+
+        /**
+         * Gets the current timestamp
+         * @private
+         */
+        function getTimestamp() {
+            return (new Date().getTime());
+        }
+
+        /**
+         * Build a "similar" response as done in the real BroadcastChannel API
+         */
+        function buildResponse(data) {
+            return {
+                timestamp: getTimestamp(),
+                isTrusted: true,
+                target: null, // Since we are using JSON stringify, we cannot pass references.
+                currentTarget: null,
+                data: data,
+                bubbles: false,
+                cancelable: false,
+                defaultPrevented: false,
+                lastEventId: '',
+                origin: context.location.origin
+            };
+        }
+
+        /**
+         * Creates a new BroadcastChannel
+         * @param {String} channelName - the channel name.
+         * return {BroadcastChannel}
+         */
+        function BroadcastChannel(channelName) {
+
+            // Check if localStorage is available.
+            if (!context.localStorage) {
+                throw 'localStorage not available';
+            }
+
+            // Add custom prefix to Channel Name.
+            let _channelId = _prefix + channelName,
+                isFirstChannel = (_channels === null);
+
+            this.channelId = _channelId;
+
+            _tabId = _tabId || getRandomString(); // Creates a new tab identifier, if necessary.
+            _channels = _channels || {}; // Initializes channels, if necessary.
+            _channels[_channelId] = _channels[_channelId] || [];
+
+            // Adds the current Broadcast Channel.
+            _channels[_channelId].push(this);
+
+            // Creates a sufficiently random name for the current instance of BC.
+            this.name = _channelId + '::::' + getRandomString() + getTimestamp();
+
+            // If it is the first instance of Channel created, also creates the storage listener.
+            if (isFirstChannel) {
+                // addEventListener.
+                context.addEventListener('storage', _onmsg.bind(this), false);
+            }
+
+            return this;
+        }
+
+        /**
+         * Empty function to prevent errors when calling onmessage.
+         */
+        BroadcastChannel.prototype.onmessage = function (ev) { };
+
+        /**
+         * Sends the message to different channels.
+         * @param {Object} data - the data to be sent ( actually, it can be any JS type ).
+         */
+        BroadcastChannel.prototype.postMessage = function (data) {
+            // Gets all the 'Same tab' channels available.
+            if (!_channels) return;
+
+            if (this.closed) {
+                throw 'This BroadcastChannel is closed.';
+            }
+
+            // Build the event-like response.
+            let msgObj = buildResponse(data);
+
+            // SAME-TAB communication.
+            let subscribers = _channels[this.channelId] || [];
+            for (let j in subscribers) {
+                // We don't send the message to ourselves.
+                if (subscribers[j].closed || subscribers[j].name === this.name) continue;
+
+                if (subscribers[j].onmessage) {
+                    subscribers[j].onmessage(msgObj);
                 }
-                let value = JSON.stringify(message);
+            }
 
-                // Broadcast to other contexts via storage events...
-                let key = this._id + String(Date.now()) + '$' + String(Math.random());
-                global.localStorage.setItem(key, value);
-                setTimeout(function () { global.localStorage.removeItem(key); }, 500);
+            // CROSS-TAB communication.
+            // Adds some properties to communicate among the tabs.
+            let editedObj = {
+                channelId: this.channelId,
+                bcId: this.name,
+                tabId: _tabId,
+                message: msgObj
+            };
+            let lsKey = 'eomBCmessage_' + getRandomString() + '_' + this.channelId;
+            try {
+                let editedJSON = JSON.stringify(editedObj);
+                // Set localStorage item (and, after that, removes it).
+                context.localStorage.setItem(lsKey, editedJSON);
+            } catch (ex) {
+                throw 'Message conversion has resulted in an error.';
+            }
 
-                // Broadcast to current context via ports
-                channels[this._id].forEach(function (bc) {
-                    if (bc === $this) return;
-                    bc._mc.port2.postMessage(JSON.parse(value));
-                });
-            },
-            close: function () {
-                if (this._closed) return;
-                this._closed = true;
-                this._mc.port1.close();
-                this._mc.port2.close();
+            setTimeout(function () { context.localStorage.removeItem(lsKey); }, 1000);
 
-                let index = channels[this._id].indexOf(this);
-                channels[this._id].splice(index, 1);
-            },
+        };
 
-            // EventTarget API
-            get onmessage() { return this._mc.port1.onmessage; },
-            set onmessage(value) { this._mc.port1.onmessage = value; },
-            addEventListener: function (type, listener /*, useCapture*/) {
-                return this._mc.port1.addEventListener.apply(this._mc.port1, arguments);
-            },
-            removeEventListener: function (type, listener /*, useCapture*/) {
-                return this._mc.port1.removeEventListener.apply(this._mc.port1, arguments);
-            },
-            dispatchEvent: function (event) {
-                return this._mc.port1.dispatchEvent.apply(this._mc.port1, arguments);
+        /**
+         * Handler of the 'storage' function.
+         * Called when another window has sent a message.
+         * @param {Object} ev - the message.
+         * @private
+         */
+        function _onmsg(ev) {
+            let key = ev.key,
+                newValue = ev.newValue,
+                isRemoved = !newValue,
+                obj = null;
+
+            // Actually checks if the messages if from us.
+            if (key.indexOf('eomBCmessage_') > -1 && !isRemoved) {
+
+                try {
+                    obj = JSON.parse(newValue);
+                } catch (ex) {
+                    throw 'Message conversion has resulted in an error.';
+                }
+
+                // NOTE: Check on tab is done to prevent IE error
+                // (localStorage event is called even in the same tab :( )
+
+                if ((obj.tabId !== _tabId) &&
+                    obj.channelId &&
+                    _channels &&
+                    _channels[obj.channelId]) {
+
+                    let subscribers = _channels[obj.channelId];
+                    for (let j in subscribers) {
+                        if (!subscribers[j].closed && subscribers[j].onmessage) {
+                            subscribers[j].onmessage(obj.message);
+                        }
+                    }
+                    // Remove the item for safety.
+                    context.localStorage.removeItem(key);
+                }
+            }
+        }
+
+        /**
+         * Closes a Broadcast channel.
+         */
+        BroadcastChannel.prototype.close = function () {
+
+            this.closed = true;
+
+            let index = _channels[this.channelId].indexOf(this);
+            if (index > -1)
+                _channels[this.channelId].splice(index, 1);
+
+            // If we have no channels, remove the listener.
+            if (!_channels[this.channelId].length) {
+                delete _channels[this.channelId];
+            }
+            if (isEmpty(_channels)) {
+                context.removeEventListener('storage', _onmsg.bind(this));
             }
         };
-        global.BroadcastChannel = global.BroadcastChannel || BroadcastChannel;
-    }(self));
+
+        // Sets BroadcastChannel, if not available.
+        context.BroadcastChannel = context.BroadcastChannel || BroadcastChannel;
+
+    })(window.top);
 }
 
 declare const Raven: {
@@ -351,8 +491,7 @@ function reinit() {
  */
 function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError> {
     log('[jwt.js] initializing');
-
-    INITIAL_JWT_OPTIONS = jwtOptions;
+    INITIAL_JWT_OPTIONS = Object.assign({}, jwtOptions);
     const options = jwtOptions.keycloakOptions ? Object.assign({}, DEFAULT_KEYCLOAK_OPTIONS, jwtOptions.keycloakOptions) : DEFAULT_KEYCLOAK_OPTIONS;
     options.url = !options.url ? ssoUrl(options.internalAuth) : options.url;
     disablePolling = jwtOptions.disablePolling;
@@ -378,11 +517,11 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
         if (!broadcastChannel) {
             broadcastChannel = new BroadcastChannel(`jwt_${options.realm}`);
         }
-        broadcastChannel.onmessage = function (e: IBroadcastChannelPayloadEvent) {
+        broadcastChannel.onmessage = (e: IBroadcastChannelPayloadEvent) => {
             log(`[jwt.js] BroadcastChannel, Received event : ${e.data.type}`);
-            if (this && e && e.data && e.data.type === 'Initialized' && !this.isAuthenticated() && e.data.authenticated) {
+            if (e && e.data && e.data.type === 'Initialized' && !state.keycloak.authenticated && e.data.authenticated ) {
                 if (options.clientId === e.data.clientId) {
-                    this.reinit();
+                    reinit();
                 } else {
                     if (jwtOptions.reLoginIframeEnabled && jwtOptions.reLoginIframe) {
                         const iframeMessage = { value: null, message: 'reinit' };
@@ -390,9 +529,9 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
                     }
                 }
             }
-        }.bind(this);
+        };
     }
-    state.keycloak = Keycloak(options);
+    if (!state.keycloak) state.keycloak = Keycloak(options);
 
     // wire up our handlers to keycloak's events
     state.keycloak.onAuthSuccess = onAuthSuccessCallback;
@@ -834,9 +973,9 @@ function onAuthRefreshErrorCallback() {
 
 function onAuthLogoutCallback() {
     log('[jwt.js] onAuthLogout');
-    keycloakLogoutHandler();
     // skip redirect if user is logs out from other tabs.
     logout({ skipRedirect: true });
+    keycloakLogoutHandler();
 }
 
 /**

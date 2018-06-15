@@ -1,17 +1,20 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Jwt Redhat Re-login Iframe</title>
 </head>
+
 <body>
     <script>
         var callParentReinit = false;
+        var initCalled = false;
         receiveMessage = function (event) {
             if (!event || !event.data || event.data === 'changed' || event.data === 'unchanged' || event.data === 'error' || !jwt) {
                 return;
             }
 
-            var data = {message:''};
+            var data = { message: '' };
             try {
                 data = JSON.parse(event.data);
             } catch (error) {
@@ -19,8 +22,8 @@
             }
 
             jwt.default.onInit(function () {
-                if(this.callParentReinit && jwt.default.isAuthenticated() && window.parent.sessionjs)  {
-                    console.log('reinitializing parent');
+                if (this.callParentReinit && jwt.default.isAuthenticated() && window.parent.sessionjs) {
+                    console.log('[re-login-iframe] Reinitializing parent');
                     window.parent.sessionjs.reinit();
                     this.callParentReinit = false;
                 }
@@ -30,18 +33,25 @@
                 case 'reinit':
                     try {
                         if (!jwt.default.isAuthenticated()) {
-                            console.log('reinitializing');
+                            console.log('[re-login-iframe] Reinitializing');
                             this.callParentReinit = true;
                             jwt.default.reinit();
                         }
                     } catch (e) {
-                        console.log(e + 're-init error');
+                        console.log('[re-login-iframe] ' + 'reinit error: ' + e);
                     }
                     break;
                 case 'init':
-                    console.log('initializing');
-                    jwt.default.init(data.value);
-                    this.callParentReinit = false;
+                    if (!this.initCalled) {
+                        console.log('[re-login-iframe] Initializing');
+                        this.callParentReinit = false;
+                        try {
+                            jwt.default.init(data.value);
+                        } catch (e) {
+                            console.log('[re-login-iframe] ' + 'init error: ' + e);
+                        }
+                        this.initCalled = true;
+                    }
                     break;
             }
         }.bind(this);
