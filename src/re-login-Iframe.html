@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Jwt Redhat Re-login Iframe</title>
 </head>
+
 <body>
     <script>
         var callParentReinit = false;
@@ -12,7 +14,7 @@
                 return;
             }
 
-            var data = {message:''};
+            var data = { message: '' };
             try {
                 data = JSON.parse(event.data);
             } catch (error) {
@@ -20,7 +22,7 @@
             }
 
             jwt.default.onInit(function () {
-                if(this.callParentReinit && jwt.default.isAuthenticated() && window.parent.sessionjs)  {
+                if (this.callParentReinit && jwt.default.isAuthenticated() && window.parent.sessionjs) {
                     console.log('[re-login-iframe] Reinitializing parent');
                     window.parent.sessionjs.reinit();
                     this.callParentReinit = false;
@@ -36,14 +38,18 @@
                             jwt.default.reinit();
                         }
                     } catch (e) {
-                        console.log('[re-login-iframe] '+'reinit error: '+ e);
+                        console.log('[re-login-iframe] ' + 'reinit error: ' + e);
                     }
                     break;
                 case 'init':
-                    if(!this.initCalled) {
+                    if (!this.initCalled) {
                         console.log('[re-login-iframe] Initializing');
                         this.callParentReinit = false;
-                        jwt.default.init(data.value);
+                        try {
+                            jwt.default.init(data.value);
+                        } catch (e) {
+                            console.log('[re-login-iframe] ' + 'init error: ' + e);
+                        }
                         this.initCalled = true;
                     }
                     break;
