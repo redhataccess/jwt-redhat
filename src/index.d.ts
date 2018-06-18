@@ -2,7 +2,7 @@ import { ISimplePromise }   from './simulatedPromise';
 import { Keycloak }         from '../@types/keycloak';
 import { INumberCache }     from './cacheUtils';
 
-import { 
+import {
     ILoginOptions,
     IToken,
     IInternalToken,
