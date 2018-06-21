@@ -532,7 +532,7 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
             }
         };
     }
-    // if (!state.keycloak)
+
     state.keycloak = Keycloak(options);
 
     // wire up our handlers to keycloak's events
