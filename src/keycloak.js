@@ -160,7 +160,9 @@
                         throw 'Invalid value for onLoad';
                 }
             }
-
+            // Added by jwt-redhat to make sure we remove old Iframe from dom on reinit
+            // Please keep it while updating jwt version to make sure reinit works smoothly
+            // This can be removed if keycloak starts providing a reliable reinit functionality.
             kc.removeIframeFromDom = function () {
                 if (loginIframe.enable && loginIframe.iframe && loginIframe.iframe.parentNode) {
                     loginIframe.iframe.parentNode.removeChild(loginIframe.iframe);
