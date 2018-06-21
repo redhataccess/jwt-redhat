@@ -160,6 +160,11 @@
                         throw 'Invalid value for onLoad';
                 }
             }
+            kc.removeIframeFromDom = function () {
+                if (loginIframe.enable && loginIframe.iframe && loginIframe.iframe.parentNode) {
+                    loginIframe.iframe.parentNode.removeChild(loginIframe.iframe);
+                }
+            }
 
             function processInit() {
                 var callback = parseCallback(window.location.href);

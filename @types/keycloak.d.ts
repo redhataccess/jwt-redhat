@@ -344,6 +344,13 @@ declare namespace Keycloak {
 		init(initOptions: KeycloakInitOptions): KeycloakPromise<boolean, KeycloakError>;
 
 		/**
+		 * Called to remove iframe from dom.
+		 * @param none
+		 * @returns undefined.
+		 */
+		removeIframeFromDom(): void;
+
+		/**
 		 * Redirects to login form.
 		 * @param options Login options.
 		 */
