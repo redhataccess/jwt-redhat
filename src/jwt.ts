@@ -942,7 +942,8 @@ function ssoUrl(isInternal?: boolean) {
         case 'ci.foo.redhat.com':
         default:
             log('[jwt.js] ENV: ci');
-            return `https://${subDomain}.dev2.redhat.com/auth`;
+            const subSubDomain = isInternal === true ? 'dev' : 'dev2';
+            return `https://${subDomain}.${subSubDomain}.redhat.com/auth`;
     }
 }
 
