@@ -480,6 +480,7 @@ function reinit() {
         return;
     }
     resetKeyCount(FAIL_COUNT_NAME);
+    if ( state.keycloak) state.keycloak.removeIframeFromDom();
     init(INITIAL_JWT_OPTIONS);
 }
 
@@ -531,7 +532,8 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
             }
         };
     }
-    if (!state.keycloak) state.keycloak = Keycloak(options);
+
+    state.keycloak = Keycloak(options);
 
     // wire up our handlers to keycloak's events
     state.keycloak.onAuthSuccess = onAuthSuccessCallback;

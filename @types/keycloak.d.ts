@@ -344,6 +344,15 @@ declare namespace Keycloak {
 		init(initOptions: KeycloakInitOptions): KeycloakPromise<boolean, KeycloakError>;
 
 		/**
+		 * Added by jwt-redhat to make sure we remove old Iframe from dom on reinit
+         * Please keep it while updating jwt version to make sure reinit works smoothly
+         * This can be removed if keycloak starts providing a reliable reinit functionality.
+		 * @param none
+		 * @returns undefined.
+		 */
+		removeIframeFromDom(): void;
+
+		/**
 		 * Redirects to login form.
 		 * @param options Login options.
 		 */
