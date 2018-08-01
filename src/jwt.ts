@@ -450,8 +450,6 @@ const events = {
     initError: []
 };
 
-document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
-
 /**
  * Log session-related messages to the console, in pre-prod environments.
  */
@@ -506,8 +504,11 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     COOKIE_TOKEN_NAME = TOKEN_NAME;
     REFRESH_TOKEN_NAME = `${options.clientId}${REFRESH_TOKEN_NAME_SURFIX}`;
     FAIL_COUNT_NAME = `${options.clientId}${FAIL_COUNT_NAME_SURFIX}`;
-
-    token = lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
+    // Remove Cookie if present
+    if (!INITIAL_JWT_OPTIONS.generateJwtTokenCookie && lib.getCookieValue(COOKIE_TOKEN_NAME)) {
+        document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
+    }
+    token = getStoredTokenValue();
     refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
 
     if (token && token !== 'undefined') { DEFAULT_KEYCLOAK_INIT_OPTIONS.token = token; }
@@ -1225,7 +1226,9 @@ function setToken(token) {
         // it's been expired for a long time.
         log('[jwt.js] setting access token');
         lib.store.local.set(TOKEN_NAME, token);
-        document.cookie = COOKIE_TOKEN_NAME + '=' + token + ';path=/;max-age=' + 15 * 60 + ';domain=.' + origin + ';secure;';
+        if (INITIAL_JWT_OPTIONS.generateJwtTokenCookie) {
+            document.cookie = COOKIE_TOKEN_NAME + '=' + token + ';path=/;max-age=' + 15 * 60 + ';domain=.' + origin + ';secure;';
+        }
     }
 }
 
@@ -1238,7 +1241,10 @@ function setToken(token) {
 function removeToken() {
     log('[jwt.js] removing access token');
     lib.store.local.remove(TOKEN_NAME);
-    document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
+    // Remove cookie if present
+    if (lib.getCookieValue(COOKIE_TOKEN_NAME)) {
+        document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.' + origin + '; path=/;secure;';
+    }
 }
 
 // init
@@ -1293,7 +1299,8 @@ function getToken(): IToken | IInternalToken {
  * @return {Object} the parsed JSON Web Token
  */
 function getStoredTokenValue(): string {
-    return lib.store.local.get(TOKEN_NAME) || lib.getCookieValue(COOKIE_TOKEN_NAME);
+    const token = lib.store.local.get(TOKEN_NAME);
+    return !!token ? token : !!INITIAL_JWT_OPTIONS.generateJwtTokenCookie ? lib.getCookieValue(COOKIE_TOKEN_NAME) : undefined;
 }
 
 /* Get a string containing the unparsed, base64-encoded JSON Web Token.
