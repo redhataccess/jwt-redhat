@@ -30,6 +30,7 @@ export interface IJwtOptions {
     reLoginIframeEnabled?: boolean;
     reLoginIframe?: any;
     disableBroadcastMessage?: boolean;
+    generateJwtTokenCookie?: boolean;
 }
 
 
