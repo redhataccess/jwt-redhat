@@ -1301,7 +1301,7 @@ function getToken(): IToken | IInternalToken {
  * @return {Object} the parsed JSON Web Token
  */
 function getStoredTokenValue(): string {
-    let token = lib.store.local.get(TOKEN_NAME);
+    const token = lib.store.local.get(TOKEN_NAME);
     return !!token ? token : !!INITIAL_JWT_OPTIONS.generateJwtTokenCookie ? lib.getCookieValue(COOKIE_TOKEN_NAME) : undefined;
 }
 
