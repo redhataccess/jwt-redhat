@@ -506,7 +506,7 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     FAIL_COUNT_NAME = `${options.clientId}${FAIL_COUNT_NAME_SURFIX}`;
     // Remove Cookie if present
     if (!INITIAL_JWT_OPTIONS.generateJwtTokenCookie && lib.getCookieValue(COOKIE_TOKEN_NAME)) {
-        document.cookie = COOKIE_TOKEN_NAME + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.redhat.com; path=/; secure;';
+        document.cookie = COOKIE_TOKEN_NAME + `=;expires=Thu, 01 Jan 1970 00:00:00 GMT; domain=.${origin}; path=/; secure;`;
     }
     token = getStoredTokenValue();
     refreshToken = lib.store.local.get(REFRESH_TOKEN_NAME);
