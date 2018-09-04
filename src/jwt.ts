@@ -1180,8 +1180,8 @@ function updateTokenFailure(e: ITokenUpdateFailure) {
     if (initialUserToken) {
         userLoginTime = (+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60;
     }
-    failCountPassed(FAIL_COUNT_NAME, 4).then((isFailCountPassed) => {
-        if (isFailCountPassed) {
+    failCountEqualsThreshold(FAIL_COUNT_NAME, FAIL_COUNT_THRESHOLD).then((isfailCountEqualsThreshold) => {
+        if (isfailCountEqualsThreshold) {
             sendToSentry(new Error(`[jwt.js] Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts within ${userLoginTime} hours of logging in`), e);
         }
         incKeyCount(FAIL_COUNT_NAME);
@@ -1551,6 +1551,17 @@ function getCountForKey(key: string): Promise<number> {
 function failCountPassed(key: string, threshold: number): Promise<boolean> {
     return getCountForKey(key).then((count) => {
         return count > threshold;
+    });
+}
+
+/**
+ * Return whether or not the consecutive failure count is equal to threshold.
+ * @memberof module:jwt
+ * @return {Boolean} is the consecutive failure count equal to threshold
+ */
+function failCountEqualsThreshold(key: string, threshold: number): Promise<boolean> {
+    return getCountForKey(key).then((count) => {
+        return count === threshold;
     });
 }
 
