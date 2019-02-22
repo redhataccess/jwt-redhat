@@ -11,7 +11,7 @@ git reset --hard upstream/master &&
 yarn install --check-files &&
 yarn version --no-git-tag-version --new-version=$1 &&
 yarn build &&
-git add package.json yarn.lock dist/ &&
+git add package.json yarn.lock &&
 git commit -m "Publish version $1" &&
 git tag $1 &&
 git push upstream master &&
