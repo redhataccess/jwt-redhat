@@ -911,6 +911,7 @@ function ssoUrl(isInternal?: boolean) {
         case 'rhn.redhat.com':
         case 'hardware.redhat.com':
         case 'unified.gsslab.rdu2.redhat.com':
+        case 'attachment-viewer.cee.redhat.com':
             log('[jwt.js] ENV: prod');
             return `https://${subDomain}.redhat.com/auth`;
 
@@ -926,6 +927,7 @@ function ssoUrl(isInternal?: boolean) {
         case 'qa.foo.redhat.com':
         case 'accessqa.usersys.redhat.com':
         case 'unified-qa.gsslab.pnq2.redhat.com':
+        case 'sos-viewer.corp.qa.redhat.com':
             log('[jwt.js] ENV: qa');
             return `https://${subDomain}.qa.redhat.com/auth`;
 
