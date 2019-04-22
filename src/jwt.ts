@@ -1180,10 +1180,10 @@ function updateTokenFailure(e: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
     let userLoginTime = undefined;
     if (initialUserToken) {
-        userLoginTime = (+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60;
+        userLoginTime = ((+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60).toFixed(1);
     }
     failCountEqualsThreshold(FAIL_COUNT_NAME, FAIL_COUNT_THRESHOLD).then((isfailCountEqualsThreshold) => {
-        if (isfailCountEqualsThreshold) {
+        if (isfailCountEqualsThreshold && userLoginTime < 14) {
             sendToSentry(new Error(`[jwt.js] Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts within ${userLoginTime} hours of logging in`), e);
         }
         incKeyCount(FAIL_COUNT_NAME);

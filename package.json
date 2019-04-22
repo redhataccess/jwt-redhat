@@ -7,7 +7,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "lint": "./node_modules/.bin/tslint 'src/**/*.ts'",
-    "build": "npm run clean && webpack --config webpack.unminified.config.ts --bail --progress --profile",
+    "build": "npm run clean && webpack --config webpack.config.ts --bail --progress --profile",
     "patch-release": "npm run build && npm version patch && npm publish && git push --follow-tags",
     "prepublish": "npm run build"
   },
@@ -18,19 +18,19 @@
   "author": "Samuel Mendenhall <Samuel.Mendenhall@gmail.com> (https://github.com/engineersamuel)",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^7.0.22",
-    "@types/webpack": "^3.8.3",
-    "ava": "^0.23.0",
+    "@types/node": "^11.13.4",
+    "@types/webpack": "^4.4.27",
     "btoa-lite": "^1.0.0",
     "html-webpack-inline-source-plugin": "^0.0.10",
     "html-webpack-plugin": "^3.2.0",
-    "localforage": "^1.5.5",
-    "rimraf": "^2.6.2",
-    "ts-loader": "^3.2.0",
-    "ts-node": "^3.3.0",
-    "tslint": "^5.9.1",
-    "tslint-loader": "^3.5.3",
-    "typescript": "^2.6.2",
-    "webpack": "^3.10.0"
+    "localforage": "^1.7.3",
+    "rimraf": "^2.6.3",
+    "ts-loader": "^5.3.3",
+    "ts-node": "^8.1.0",
+    "tslint": "^5.16.0",
+    "tslint-loader": "^3.5.4",
+    "typescript": "^3.4.3",
+    "webpack": "^4.30.0",
+    "webpack-cli": "^3.3.0"
   }
 }

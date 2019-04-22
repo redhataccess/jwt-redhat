@@ -1,24 +1,19 @@
-'use strict';
-
-const path = require('path');
-
-import webpack, {
-    LoaderOptionsPlugin,
-    DefinePlugin,
-    optimize
+import {
+    Configuration
 } from 'webpack';
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const HtmlWebpackInlineSourcePlugin = require('html-webpack-inline-source-plugin');
 
-module.exports = function(options) {
-    const config: webpack.Configuration = {
+module.exports = function() {
+    const config: Configuration = {
         entry: './src/index',
         output: {
             path: __dirname + '/dist',
-            filename: options.filename,
+            filename: 'jwt.js',
             library: 'jwt',
             libraryTarget: 'umd'
         },
+        mode: 'production',
         module: {
             noParse: /node_modules\/localforage\/dist\/localforage.js/,
             rules: [
@@ -30,23 +25,11 @@ module.exports = function(options) {
                 {
                     test: /\.ts$/,
                     loader: 'ts-loader',
-                    exclude: [
-                        path.resolve(__dirname, 'node_modules'),
-                        '*.test.ts'
-                    ]
+                    exclude: /node_modules/
                 }
             ]
         },
         plugins: [
-            new LoaderOptionsPlugin({
-                minimize: false,
-                debug: false
-            }),
-            new DefinePlugin({
-                'process.env': {
-                    'NODE_ENV': JSON.stringify('production')
-                }
-            }),
             new HtmlWebpackPlugin({
                 filename: 're-login-Iframe.html',
                 template: './src/re-login-Iframe.html',
@@ -59,22 +42,5 @@ module.exports = function(options) {
             extensions: ['.js', '.ts']
         }
     };
-
-    if (options.minified) {
-        config.plugins.push(
-            new LoaderOptionsPlugin({
-                minimize: false,
-                debug: false
-            })
-        );
-        config.plugins.push(
-            new optimize.UglifyJsPlugin({
-                compress: {
-                    warnings: false
-                }
-            })
-        )
-    }
-
     return config;
 };
