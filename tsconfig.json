@@ -4,7 +4,7 @@
   "compilerOptions": {
     "target": "es5",
     "module": "commonjs",
-    "lib": ["dom", "es2015"],
+    "lib": ["dom", "es5", "es2015", "es6", "es7", "es2017.object"],
     "sourceMap": false,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
