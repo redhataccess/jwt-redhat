@@ -1178,13 +1178,13 @@ function updateTokenSuccess(refreshed: boolean) {
  */
 function updateTokenFailure(error: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
-    let userLoginDuration = undefined;
+    let user_login_duration = undefined;
     if (initialUserToken) {
-        userLoginDuration = ((+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60).toFixed(1);
+        user_login_duration = ((+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60).toFixed(1);
     }
     failCountEqualsThreshold(FAIL_COUNT_NAME, FAIL_COUNT_THRESHOLD).then((isfailCountEqualsThreshold) => {
-        if (isfailCountEqualsThreshold && userLoginDuration < 14) {
-            sendToSentry(new Error(`[jwt.js] Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts.`), {error}, {userLoginDuration});
+        if (isfailCountEqualsThreshold && user_login_duration < 14) {
+            sendToSentry(new Error(`[jwt.js] Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts.`), {error}, {user_login_duration});
         }
         incKeyCount(FAIL_COUNT_NAME);
     });
