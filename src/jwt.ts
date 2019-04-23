@@ -1176,15 +1176,15 @@ function updateTokenSuccess(refreshed: boolean) {
  * @memberof module:jwt
  * @private
  */
-function updateTokenFailure(e: ITokenUpdateFailure) {
+function updateTokenFailure(error: ITokenUpdateFailure) {
     log('[jwt.js] updateTokenFailure');
-    let userLoginTime = undefined;
+    let user_login_duration = undefined;
     if (initialUserToken) {
-        userLoginTime = ((+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60).toFixed(1);
+        user_login_duration = ((+new Date() - initialUserToken.auth_time * 1000) / 1000 / 60 / 60).toFixed(1);
     }
     failCountEqualsThreshold(FAIL_COUNT_NAME, FAIL_COUNT_THRESHOLD).then((isfailCountEqualsThreshold) => {
-        if (isfailCountEqualsThreshold && userLoginTime < 14) {
-            sendToSentry(new Error(`[jwt.js] Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts within ${userLoginTime} hours of logging in`), e);
+        if (isfailCountEqualsThreshold && user_login_duration < 14) {
+            sendToSentry(new Error(`[jwt.js] Update token failure: after ${FAIL_COUNT_THRESHOLD} attempts.`), {error}, {user_login_duration});
         }
         incKeyCount(FAIL_COUNT_NAME);
     });
@@ -1511,19 +1511,21 @@ function expiresIn(): number {
  * @memberof module:jwt
  * @private
  */
-function sendToSentry(error: Error, extra: Object) {
+function sendToSentry(error: Error, extra?: {error: Error|any}, additionalTags?: any) {
     // once the user info service has returned, use its data to add user
     // context to RavenJS, for inclusion in Sentry error reports.
     userInfo = getUserInfo();
     if (typeof window.Raven !== 'undefined' && typeof window.Raven.captureException === 'function') {
-        Raven.setTagsContext({
+        let tagsContext = {
             is_authenticated: isAuthenticated(),
             is_token_expired: state.keycloak.authenticated ? state.keycloak.isTokenExpired(0) : null,
             token_expires_in: expiresIn(),
             // TODO -- if ever upgrading keycloak to upstream see https://github.com/keycloak/keycloak/pull/5008 to ensure this error message stays inline
-            state_changed: extra && (extra as Error).message && (extra as Error).message.toLowerCase().indexOf('Cookie sessionId and keycloak sessionId do not match') !== -1
-        });
-        Raven.captureException(error, { extra: extra });
+            state_changed: extra && extra.error && extra.error.message && (extra.error.message.toLowerCase().indexOf('Cookie sessionId and keycloak sessionId do not match') !== -1),
+            ...additionalTags
+        };
+        Raven.setTagsContext(tagsContext);
+        Raven.captureException(error, {extra});
     }
 }
 
