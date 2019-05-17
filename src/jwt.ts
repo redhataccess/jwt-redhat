@@ -913,14 +913,14 @@ function ssoUrl(isInternal?: boolean) {
         case 'unified.gsslab.rdu2.redhat.com':
         case 'attachment-viewer.cee.redhat.com':
             log('[jwt.js] ENV: prod');
-            return `https://${subDomain}.redhat.com/auth`;
+            return getSsoUrl(subDomain).PROD;
 
         // Valid STAGE URLs
         case 'access.stage.redhat.com':
         case 'accessstage.usersys.redhat.com':
         case 'stage.foo.redhat.com':
             log('[jwt.js] ENV: stage');
-            return `https://${subDomain}.stage.redhat.com/auth`;
+            return getSsoUrl(subDomain).STAGE;
 
         // Valid QA URLs
         case 'access.qa.redhat.com':
@@ -929,15 +929,15 @@ function ssoUrl(isInternal?: boolean) {
         case 'unified-qa.gsslab.pnq2.redhat.com':
         case 'sos-viewer.corp.qa.redhat.com':
             log('[jwt.js] ENV: qa');
-            return `https://${subDomain}.qa.redhat.com/auth`;
+            return isInternal ? getSsoUrl(subDomain).STAGE : getSsoUrl(subDomain).QA;
 
         case 'ui.foo.redhat.com':
             log('[jwt.js] ENV: qa / dev');
-            return `https://${subDomain}.dev1.redhat.com/auth`;
+            return isInternal ? getSsoUrl(subDomain).STAGE : getSsoUrl(subDomain).DEV1;
 
         case 'fte.foo.redhat.com':
             log('[jwt.js] ENV: fte');
-            return `https://${subDomain}.dev.redhat.com/auth`;
+            return isInternal ? getSsoUrl(subDomain).STAGE : getSsoUrl(subDomain).DEV;
 
         // Valid CI URLs
         case 'access.devgssci.devlab.phx1.redhat.com':
@@ -945,8 +945,7 @@ function ssoUrl(isInternal?: boolean) {
         case 'ci.foo.redhat.com':
         default:
             log('[jwt.js] ENV: ci');
-            const subSubDomain = isInternal === true ? 'dev' : 'dev2';
-            return `https://${subDomain}.${subSubDomain}.redhat.com/auth`;
+            return subDomain === 'auth' ? getSsoUrl(subDomain).STAGE : (isInternal ? getSsoUrl(subDomain).DEV : getSsoUrl(subDomain).DEV2);
     }
 }
 
