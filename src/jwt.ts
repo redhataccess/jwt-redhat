@@ -19,6 +19,7 @@ import {
     IBroadcastChannelPayload,
     IBroadcastChannelPayloadEvent
 } from './models';
+import getSsoUrl from './ssoUrlsEnum';
 
 declare global {
     interface Window {

@@ -1,4 +1,4 @@
-function getSsoUrl(subDomain) {
+export default function getSsoUrl(subDomain) {
     return {
         PROD:   `https://${subDomain}.redhat.com/auth`,
         STAGE:  `https://${subDomain}.stage.redhat.com/auth`,
