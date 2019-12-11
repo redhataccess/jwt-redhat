@@ -913,6 +913,7 @@ function ssoUrl(isInternal?: boolean) {
         case 'hardware.redhat.com':
         case 'unified.gsslab.rdu2.redhat.com':
         case 'attachment-viewer.cee.redhat.com':
+        case 'connect.redhat.com':
             log('[jwt.js] ENV: prod');
             return getSsoUrl(subDomain).PROD;
 
@@ -920,6 +921,9 @@ function ssoUrl(isInternal?: boolean) {
         case 'access.stage.redhat.com':
         case 'accessstage.usersys.redhat.com':
         case 'stage.foo.redhat.com':
+        case 'fte-connect.redhat.com':
+        case 'dev-connect.redhat.com':
+        case 'stage-connect.redhat.com':
             log('[jwt.js] ENV: stage');
             return getSsoUrl(subDomain).STAGE;
 
