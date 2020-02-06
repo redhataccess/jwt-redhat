@@ -69,9 +69,9 @@ Jwt.onInitialUpdateToken(async function () {
 
 ### Selecting SSO Environment
 
-There are two ways for determining SSo env:
+There are two ways for determining SSO Environment:
 
-* Using Hostname: Depending upon the location hostname, the SSO Env will be selected based on a preexisting list of                       names. 
+* Using Hostname: Depending upon the location hostname, the SSO Env will be selected based on a preexisting list of                       hostnames. 
 * Pass Env: You can also pass environment names such as QA, STAGE, PROD etc during initialization. For e.x. :
 ```
 Jwt.init({
