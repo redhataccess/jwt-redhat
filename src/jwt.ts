@@ -493,7 +493,7 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
     log('[jwt.js] initializing');
     INITIAL_JWT_OPTIONS = Object.assign({}, jwtOptions);
     const options = jwtOptions.keycloakOptions ? Object.assign({}, DEFAULT_KEYCLOAK_OPTIONS, jwtOptions.keycloakOptions) : DEFAULT_KEYCLOAK_OPTIONS;
-    options.url = !options.url ? ssoUrl(options.internalAuth) : options.url;
+    options.url = !options.url ? ssoUrl(options.internalAuth, jwtOptions.ssoEnv) : options.url;
     disablePolling = jwtOptions.disablePolling;
     initialUserToken = null;
 
@@ -903,8 +903,16 @@ function keycloakTokenExpiredHandler() {
  * @returns {String} a URL to the SSO service
  * @private
  */
-function ssoUrl(isInternal?: boolean) {
+function ssoUrl(isInternal?: boolean, ssoEnv?: string) {
     const subDomain = isInternal === true ? 'auth' : 'sso'; // defaults to sso
+    if (ssoEnv) {
+        log(`[jwt.js] Passed ENV: ${ssoEnv}`);
+        const url = getSsoUrl(subDomain)[ssoEnv];
+        // return the url if the env is valid, otherwise use hostname as fallback
+        if (url) {
+            return url;
+        }
+    }
     switch (location.hostname) {
         // Valid PROD URLs
         case 'access.redhat.com':

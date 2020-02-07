@@ -31,6 +31,7 @@ export interface IJwtOptions {
     reLoginIframe?: any;
     disableBroadcastMessage?: boolean;
     generateJwtTokenCookie?: boolean;
+    ssoEnv?: string;
 }
 
 
