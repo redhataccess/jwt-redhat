@@ -74,9 +74,11 @@ There are two ways for determining SSO Environment:
 * Using Hostname: Depending upon the location hostname, the SSO Env will be selected based on a preexisting list of                       hostnames. 
 * Pass Env: You can also pass environment names such as QA, STAGE, PROD etc during initialization. For e.x. :
 ```
+import Jwt, { SsoEnv } from 'jwt-redhat';
+...
 Jwt.init({
     ...
-    ssoEnv: 'PROD'
+    ssoEnv: SsoEnv.PROD
 })
 ```
 

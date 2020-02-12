@@ -1,4 +1,5 @@
 import { Keycloak } from '../@types/keycloak';
+import { SsoEnv } from './ssoEnvEnum';
 
 export interface IKeycloakOptions {
     realm: string;
@@ -31,7 +32,7 @@ export interface IJwtOptions {
     reLoginIframe?: any;
     disableBroadcastMessage?: boolean;
     generateJwtTokenCookie?: boolean;
-    ssoEnv?: string;
+    ssoEnv?: SsoEnv;
 }
 
 

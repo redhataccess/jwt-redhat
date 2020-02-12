@@ -1,6 +1,7 @@
 import { ISimplePromise }   from './simulatedPromise';
 import { Keycloak }         from '../@types/keycloak';
 import { INumberCache }     from './cacheUtils';
+import { SsoEnv } from './ssoEnvEnum';
 
 import {
     ILoginOptions,
@@ -51,3 +52,4 @@ declare namespace Jwt {
 }
 
 export default Jwt;
+export { SsoEnv }
