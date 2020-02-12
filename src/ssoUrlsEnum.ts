@@ -6,5 +6,5 @@ export default function getSsoUrl(subDomain) {
         DEV:    `https://${subDomain}.dev.redhat.com/auth`,
         DEV1:   `https://${subDomain}.dev1.redhat.com/auth`,
         DEV2:   `https://${subDomain}.dev2.redhat.com/auth`,
-    }
+    };
 }
