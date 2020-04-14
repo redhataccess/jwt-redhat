@@ -1501,7 +1501,14 @@ function setRavenUserContext() {
     userInfo = getUserInfo();
     if (typeof window.Raven !== 'undefined' && typeof window.Raven.setUserContext === 'function') {
         log('[jwt.js] sent user context to Raven');
-        Raven.setUserContext(userInfo);
+        // PCM-8519 - don't set personal details in the sentry.
+        Raven.setUserContext({
+            user_id: userInfo.user_id,
+            account_id: userInfo.account_id,
+            account_number: userInfo.account_number,
+            internal: userInfo.internal,
+            lang: userInfo.lang
+        });
     }
 }
 
