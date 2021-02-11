@@ -1,7 +1,7 @@
 import { ITokenResponse } from '../src/models';
 
 declare namespace Keycloak {
-	type KeycloakAdapterName = 'cordova'|'default';
+	type KeycloakAdapterName = 'cordova'|'default'|'cordova-native';
 	type KeycloakOnLoad = 'login-required'|'check-sso';
 	type KeycloakResponseMode = 'query'|'fragment';
 	type KeycloakResponseType = 'code'|'id_token token'|'code id_token token';
@@ -73,7 +73,7 @@ declare namespace Keycloak {
 		pkceMethod?: "S256";
 
 		/**
-		 * Specifies the uri to redirect to after init.
+		 * Specifies the uri to redirect after init for applications without origin url. i.e adapters like cordova, corodva-native.
 		 */
 		redirectUri?: string;
 
