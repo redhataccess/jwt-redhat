@@ -18,9 +18,9 @@
 (function(root, factory) {
     if ( typeof exports === 'object' ) {
         if ( typeof module === 'object' ) {
-            module.exports = factory( require("js-sha256"), require("base64-js") );    
+            module.exports = factory( require("js-sha256"), require("base64-js") );
         } else {
-            exports["keycloak"] = factory( require("js-sha256"), require("base64-js") );    
+            exports["keycloak"] = factory( require("js-sha256"), require("base64-js") );
         }
     } else {
         /**
@@ -36,7 +36,7 @@
         /**
          * [base64-js]{@link https://github.com/beatgammit/base64-js}
          *
-         * @version v1.3.0 
+         * @version v1.3.0
          * @author Kirill, Fomichev
          * @copyright Kirill, Fomichev 2014
          * @license MIT
@@ -46,7 +46,7 @@
         /**
          * [promise-polyfill]{@link https://github.com/taylorhakes/promise-polyfill}
          *
-         * @version v8.1.3 
+         * @version v8.1.3
          * @author Hakes, Taylor
          * @copyright Hakes, Taylor 2014
          * @license MIT
@@ -56,7 +56,7 @@
         var Keycloak = factory( root["sha256"], root["base64js"] );
         root["Keycloak"] = Keycloak;
 
-        if ( typeof define === "function" && define.amd ) { 
+        if ( typeof define === "function" && define.amd ) {
             define( "keycloak", [], function () { return Keycloak; } );
         }
     }
@@ -92,7 +92,7 @@
         var promise = this.then(function handleSuccess(value) {
             callback(value);
         });
-        
+
         return toKeycloakPromise(promise);
     };
 
@@ -132,7 +132,7 @@
         var useNonce = true;
         var logInfo = createLogger(console.info);
         var logWarn = createLogger(console.warn);
-        
+
         kc.init = function (initOptions) {
             kc.authenticated = false;
 
@@ -1089,6 +1089,14 @@
             return uuid;
         }
 
+        kc.callback_id = 0;
+
+        function createCallbackId() {
+            var id = '<id: ' + (kc.callback_id++) + (Math.random()) + '>';
+            return id;
+
+        }
+
         function parseCallback(url) {
             var oauth = parseCallbackUrl(url);
             if (!oauth) {
@@ -1314,16 +1322,16 @@
 
                 for (var i = callbacks.length - 1; i >= 0; --i) {
                     var promise = callbacks[i];
-                    if (event.data == 'unchanged') {
-                        promise.setSuccess();
+                    if (event.data == 'error') {
+                        promise.setError();
                     } else {
-                        promise.setError(new Error('Cookie sessionId and keycloak sessionId do not match.  Please logout and log back in.'));
+                        promise.setSuccess(event.data == 'unchanged');
                     }
                 }
             };
 
             window.addEventListener('message', messageCallback, false);
-           //why ??
+
             var check = function() {
                 checkLoginIframe();
                 if (kc.token) {
