@@ -19,6 +19,10 @@ export interface IKeycloakInitOptions {
     checkLoginIframeInterval?: number;
     onLoad?: string;
     idToken?: string;
+    pkceMethod?: "S256";
+    redirectUri?: string;
+    silentCheckSsoRedirectUri?: string;
+    enableLogging?: boolean;
 }
 
 export interface IJwtOptions {

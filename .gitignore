@@ -76,6 +76,7 @@ $RECYCLE.BIN/
 
 # User-specific stuff:
 .idea
+.history
 
 ## File-based project format:
 *.iws

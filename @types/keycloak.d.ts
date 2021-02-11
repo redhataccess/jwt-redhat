@@ -66,6 +66,26 @@ declare namespace Keycloak {
 		 * @default standard
 		 */
 		flow?: KeycloakFlow;
+
+		/**
+		 * The Proof Key Code Exchange, value for now is always "S256" - The SHA256 based PKCE method
+		 */
+		pkceMethod?: "S256";
+
+		/**
+		 * Specifies the uri to redirect to after init.
+		 */
+		redirectUri?: string;
+
+		/**
+		 *  Set the redirect uri for silent authentication check if onLoad is set to 'check-sso'.
+		 */
+		silentCheckSsoRedirectUri?: string;
+		
+		/**
+		 *  Enables logging messages from Keycloak to the console (default is false).
+		 */
+		enableLogging?: string;
 	}
 
 	interface KeycloakLoginOptions {
