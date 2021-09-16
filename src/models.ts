@@ -69,6 +69,7 @@ export interface IToken {
     client_session: string;
     country: string; // "US";
     email: string; // "<name>+qa@redhat.com<200b>"
+    email_verified: boolean; // [true, false]
     employeeId: string; // "rhn-support-<name>"
     exp: number; // 1501873015
     firstName: string; // "Samuel"
