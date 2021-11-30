@@ -12,12 +12,15 @@
     "moduleResolution": "node",
     "allowJs": true,
     "noUnusedLocals": true,
+    // The outDir is required as without it, it will give a "Cannot write file ... because it would overwrite input file" error
+    "outDir": "dist",
     "typeRoots": [
       "node_modules/@types",
-      "@types"
+      "src/@types"
     ]
   },
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "dist"
   ]
 }
