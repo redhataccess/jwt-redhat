@@ -1,5 +1,4 @@
-const Keycloak = require('./keycloak');
-import { Keycloak } from '../@types/keycloak';
+import * as Keycloak from 'keycloak-js';
 
 import {
     CacheUtils,
@@ -8,16 +7,17 @@ import {
 } from './cacheUtils';
 
 import {
-    IKeycloakOptions,
-    IState,
-    IJwtUser,
-    ILoginOptions,
-    IToken,
-    IInternalToken,
-    ITokenUpdateFailure,
-    IJwtOptions,
-    IBroadcastChannelPayload,
-    IBroadcastChannelPayloadEvent
+  IKeycloakOptions,
+  IState,
+  IJwtUser,
+  ILoginOptions,
+  IToken,
+  IInternalToken,
+  ITokenUpdateFailure,
+  IJwtOptions,
+  IBroadcastChannelPayload,
+  IBroadcastChannelPayloadEvent,
+  IKeycloakInstance,
 } from './models';
 import getSsoUrl from './ssoUrlsEnum';
 
@@ -485,11 +485,11 @@ function reinit() {
 
 /**
  * Kicks off all the session-related things.
- *
+ * https://www.keycloak.org/docs/latest/securing_apps/index.html#init-options
  * @memberof module:jwt
  * @private
  */
-function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError> {
+function init(jwtOptions: IJwtOptions): Promise<void> {
     log('[jwt.js] initializing');
     INITIAL_JWT_OPTIONS = Object.assign({}, jwtOptions);
     const options = jwtOptions.keycloakOptions ? Object.assign({}, DEFAULT_KEYCLOAK_OPTIONS, jwtOptions.keycloakOptions) : DEFAULT_KEYCLOAK_OPTIONS;
@@ -535,7 +535,7 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
         };
     }
 
-    state.keycloak = Keycloak(options);
+    state.keycloak = Keycloak(options) as IKeycloakInstance;
 
     // wire up our handlers to keycloak's events
     state.keycloak.onAuthSuccess = onAuthSuccessCallback;
@@ -547,8 +547,8 @@ function init(jwtOptions: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keyclo
 
     return state.keycloak
         .init(jwtOptions.keycloakInitOptions ? Object.assign({}, DEFAULT_KEYCLOAK_INIT_OPTIONS, jwtOptions.keycloakInitOptions) : DEFAULT_KEYCLOAK_INIT_OPTIONS)
-        .success(keycloakInitSuccess)
-        .error(keycloakInitError);
+        .then(keycloakInitSuccess)
+        .catch(keycloakInitError);
 }
 
 /**
@@ -1083,12 +1083,12 @@ async function updateToken(force: boolean = false): Promise<boolean> {
                 log('[jwt.js] running updateToken');
                 state.keycloak
                     .updateToken(force === true ? -1 : REFRESH_TTE)
-                    .success((refreshed: boolean) => {
+                    .then((refreshed: boolean) => {
                         updateTokenSuccess(refreshed);
                         resolve(refreshed);
                     })
                     // ITokenUpdateFailure
-                    .error((e: any) => {
+                    .catch((e: any) => {
                         updateTokenFailure(e);
                         reject(e);
                     });

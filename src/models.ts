@@ -1,24 +1,18 @@
-import { Keycloak } from '../@types/keycloak';
+import * as Keycloak from 'keycloak-js';
 import { SsoEnv } from './ssoEnvEnum';
 
-export interface IKeycloakOptions {
-    realm: string;
-    clientId: string;
-    url?: string;
+export interface IKeycloakOptions extends Keycloak.KeycloakConfig {
     credentials?: any;
     internalAuth?: boolean;
 }
 
-export interface IKeycloakInitOptions {
-    responseMode?: 'query' | 'fragment';
-    flow: 'standard' | 'implicit' | 'hybrid';
-    token: ITokenResponse; // Or IToken, unsure
+export interface IKeycloakInitOptions extends Keycloak.KeycloakInitOptions {
+    responseMode?: "query" | "fragment";
+    flow: "standard" | "implicit" | "hybrid";
     refreshToken: string;
     adapter?: any; // appears to be string which is then set to an object
     checkLoginIframe?: any;
     checkLoginIframeInterval?: number;
-    onLoad?: string;
-    idToken?: string;
 }
 
 export interface IJwtOptions {
@@ -97,9 +91,20 @@ export interface IToken {
     username: string; // "rhn-support-<name>"
 }
 
+export interface IKeycloakInstance extends Keycloak.KeycloakInstance {
+    /**
+     * Added by jwt-redhat to make sure we remove old Iframe from dom on reinit
+     * Please keep it while updating jwt version to make sure reinit works smoothly
+     * This can be removed if keycloak starts providing a reliable reinit functionality.
+     * @param none
+     * @returns undefined.
+     */
+    removeIframeFromDom(): void;
+  }
+
 export interface IState {
     initialized: boolean;
-    keycloak: Keycloak.KeycloakInstance;
+    keycloak: IKeycloakInstance;
 }
 
 export interface ITokenResponse {
