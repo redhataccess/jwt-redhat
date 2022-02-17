@@ -1,7 +1,7 @@
 import { ISimplePromise }   from './simulatedPromise';
-import { Keycloak }         from '../@types/keycloak';
 import { INumberCache }     from './cacheUtils';
 import { SsoEnv } from './ssoEnvEnum';
+import getSsoUrl from './ssoUrlsEnum';
 
 import {
     ILoginOptions,
@@ -16,7 +16,7 @@ import {
 
 declare namespace Jwt {
     export function isAuthenticated(): boolean;
-    export function login(options?: ILoginOptions): Keycloak.KeycloakPromise<void, void>;
+    export function login(options?: ILoginOptions): any;
     export function logout(options?: ILoginOptions): void;
     export function register(options: any): void;
     export function hasRole(...roles: string[]): boolean;
@@ -41,7 +41,7 @@ declare namespace Jwt {
     export function onTokenExpired(func: Function): void;
     export function onInitialUpdateToken(func: Function): void;
     export function onTokenMismatch(func: Function): void;
-    export function init(options: IJwtOptions): Keycloak.KeycloakPromise<boolean, Keycloak.KeycloakError>;
+    export function init(options: IJwtOptions): Promise<void>;
     export function enableDebugLogging();
     export function disableDebugLogging();
     export const _state: IState;
@@ -52,4 +52,4 @@ declare namespace Jwt {
 }
 
 export default Jwt;
-export { SsoEnv }
+export { SsoEnv, getSsoUrl }
