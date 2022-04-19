@@ -2,6 +2,7 @@
 
 /dist
 /dist-test
+/@types
 
 ### SublimeText ###
 # cache files for sublime text
