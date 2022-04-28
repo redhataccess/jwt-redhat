@@ -1,0 +1,9 @@
+{
+    "extends": "./tsconfig",
+    "compileOnSave": false,
+    "compilerOptions": {
+        "declaration": true,
+        "declarationDir": "./@types",
+        "emitDeclarationOnly": true
+    }
+}
