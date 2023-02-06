@@ -479,7 +479,7 @@ function reinit() {
         return;
     }
     resetKeyCount(FAIL_COUNT_NAME);
-    if ( state.keycloak) state.keycloak.removeIframeFromDom();
+    if ( state.keycloak && state.keycloak.removeIframeFromDom) state.keycloak.removeIframeFromDom();
     init(INITIAL_JWT_OPTIONS);
 }
 
