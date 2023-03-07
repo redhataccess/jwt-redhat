@@ -1,3 +1,15 @@
+### Notice
+
+This library is not suitable for enterprise use. Repository will be made private. Thank you for understanding.
+
+## Recommendation for other library
+
+- [oauth4webapi](https://github.com/panva/oauth4webapi)
+- [oidc-client-ts](https://github.com/authts/oidc-client-ts)
+- [Libraries for Token Signing/Verification](https://jwt.io/libraries)
+- [client libraries](https://source.redhat.com/groups/public/ciams/docs/client_integration_faq#what-client-libraries2)
+
+
 ### Installation
 
 npm install jwt-redhat
